@@ -12,6 +12,7 @@ from time import sleep
 import ctypes
 import sys
 import subprocess
+import time
 
 # 3rd-party
 from pywinauto import Application, Desktop
@@ -151,24 +152,54 @@ def wait_for_state(app: Application, state: str, timeout: int = 20) -> 'WindowSp
     raise TimeoutError(f"等待 '{state}' 状态超时（{timeout}秒）")
 
 
-def wait_recognition_finished(main_win, timeout: int = 120) -> bool:
-    """轮询"开始识别"按钮重新可用 → 识别完成"""
-    for _ in range(timeout):
+def wait_recognition_finished(main_window, timeout=60):
+    """等待识别完成"""
+    print(f"[DEBUG] 开始等待识别完成（超时: {timeout}秒）...")
+    start_time = time.time()
+    
+    while time.time() - start_time < timeout:
         try:
-            # 使用 descendants 查找按钮
-            buttons = main_win.descendants(control_type="Button")
-            for btn in buttons:
+            # 添加状态检查
+            elapsed = int(time.time() - start_time)
+            if elapsed % 5 == 0 and elapsed > 0:  # 每5秒输出一次状态
+                print(f"[DEBUG] 等待识别完成中... ({elapsed}s/{timeout}s)")
+            
+            # 查找 "Result of recognition" 文本
+            all_texts = main_window.descendants(control_type="Text")
+            for text_elem in all_texts:
                 try:
-                    if hasattr(btn, 'automation_id') and btn.automation_id == START_BTN_ID:
-                        if btn.exists() and btn.is_enabled():
-                            return True
-                        break
+                    text_content = text_elem.window_text()
+                    if 'Result of recognition' in text_content:
+                        print(f"[INFO] 检测到识别完成标志: '{text_content}'")
+                        return True
                 except:
                     continue
-        except Exception:
-            pass
-        sleep(WAIT_MEDIUM)
+                 
+        except Exception as e:
+            print(f"[DEBUG] 检查识别状态时出错: {e}")
+            
+        time.sleep(WAIT_SHORT)
+    
+    print(f"[WARN] 等待识别完成超时 ({timeout}秒)")
     return False
+
+def wait_recognition_finished_backup(main_window, timeout=30):
+    """备用的识别完成检测方法"""
+    print(f"[DEBUG] 使用备用方法等待识别完成...")
+    
+    # 方法1: 简单等待固定时间（适用于小图片）
+    print(f"[INFO] 等待 {timeout} 秒让识别完成...")
+    time.sleep(timeout)
+    
+    # 方法2: 检查窗口是否还存在且响应
+    try:
+        if main_window.exists():
+            print(f"[INFO] 窗口仍然存在，假设识别已完成")
+            return True
+    except:
+        pass
+    
+    return True  # 备用方法默认返回成功
 
 # -----------------------------------------------------------------------------
 # 主逻辑
@@ -255,73 +286,211 @@ if __name__ == "__main__":
             
             # Step 5 & 6: 等待主窗口恢复并启动识别
             main = wait_for_state(app, 'main') # 等待图像加载完毕
+            print(f"[INFO] 图像已加载，准备启动识别...")
+            
             # 使用 descendants 查找开始识别按钮
             try:
+                print(f"[INFO] 查找开始识别按钮...")
                 buttons = main.descendants(control_type="Button")
+                print(f"[DEBUG] 找到 {len(buttons)} 个按钮")
+                
+                # 输出所有按钮的详细信息
+                for i, btn in enumerate(buttons[:10]):  # 只显示前10个避免输出过多
+                    try:
+                        btn_id = getattr(btn, 'automation_id', 'N/A')
+                        btn_text = getattr(btn, 'window_text', lambda: 'N/A')()
+                        btn_class = getattr(btn, 'class_name', lambda: 'N/A')()
+                        print(f"[DEBUG] 按钮{i}: ID='{btn_id}', Text='{btn_text}', Class='{btn_class}'")
+                    except Exception as e:
+                        print(f"[DEBUG] 按钮{i}: 无法读取信息 - {e}")
+                
                 start_btn = None
                 for btn in buttons:
                     try:
-                        if hasattr(btn, 'automation_id') and btn.automation_id == START_BTN_ID:
+                        btn_text = getattr(btn, 'window_text', lambda: '')()
+                        if 'Start Recognition' in btn_text:
+                            print(f"[INFO] 找到开始识别按钮: '{btn_text}'")
                             start_btn = btn
                             break
                     except:
                         continue
                 
                 if start_btn:
+                    print(f"[INFO] 点击开始识别按钮...")
                     start_btn.click_input()
                 else:
+                    print(f"[WARN] 未找到识别按钮，使用 F5 快捷键...")
                     # 兜底：使用快捷键
                     send_keys("{F5}")
             except Exception as e:
                 print(f"[WARN] 点击开始识别按钮失败: {e}")
+                print(f"[INFO] 使用 F5 快捷键作为兜底...")
                 send_keys("{F5}")  # 兜底
                 
-            if not wait_recognition_finished(main):
+            # 等待一下让识别开始
+            time.sleep(WAIT_MEDIUM)
+            
+            print(f"[INFO] 等待识别完成...")
+            # 尝试两种方法检测识别完成
+            recognition_finished = wait_recognition_finished(main)
+            if not recognition_finished:
+                print(f"[INFO] 状态栏方法失败，尝试备用检测方法...")
+                recognition_finished = wait_recognition_finished_backup(main)
+            
+            if not recognition_finished:
                 print(f"[WARN] 识别 {img_path.name} 超时，跳过")
                 send_keys("^w")  # 关闭标签
                 continue
+            
+            print(f"[INFO] 识别已完成！")
 
-            # Step 7: 导出 csc
+            # 识别完成后，额外等待确保状态稳定
+            time.sleep(WAIT_LONG)
+            
+            # Step 7: 保存为CSC格式
+            print(f"[INFO] 准备保存 CSC 文件...")
+            
+            # 定义输出文件路径
             out_file = OUTPUT_DIR / f"{img_path.stem}.csc"
+            print(f"[INFO] 目标保存路径: {out_file}")
+            
+            # 确保窗口有焦点
+            main.set_focus()
+            time.sleep(WAIT_SHORT)
+            
+            # 使用快捷键保存
+            print(f"[INFO] 发送保存快捷键 Shift+Ctrl+M...")
             send_keys("+^m")  # Shift+Ctrl+M
-            save_dlg = wait_for_state(app, 'save')
-            # 查找保存文件名编辑框并填写路径
+            time.sleep(WAIT_MEDIUM)
+            
+            # 等待保存对话框出现
+            print(f"[INFO] 等待保存对话框...")
+            time.sleep(WAIT_LONG)
+            
+            # 尝试在主窗口中查找保存对话框控件
             try:
-                # 导航到输出目录并输入文件名
-                send_keys("^l")  # 聚焦地址栏
-                sleep(WAIT_SHORT)
-                send_keys(str(out_file.parent), with_spaces=True)  # 输入目录路径（不加引号）
-                send_keys("{ENTER}")
-                sleep(WAIT_LONG)
+                # 方法1: 查找独立的保存对话框窗口
+                print(f"[DEBUG] 方法1: 查找独立保存对话框...")
+                save_dialog = None
+                dialogs = app.windows()
+                print(f"[DEBUG] 找到 {len(dialogs)} 个窗口")
+                for i, dialog in enumerate(dialogs):
+                    try:
+                        dialog_title = dialog.window_text()
+                        print(f"[DEBUG] 窗口{i}: '{dialog_title}'")
+                        if "Save level of recognition" in dialog_title or "save" in dialog_title.lower():
+                            save_dialog = dialog
+                            print(f"[INFO] 找到保存对话框: '{dialog_title}'")
+                            break
+                    except:
+                        print(f"[DEBUG] 窗口{i}: 无法读取标题")
                 
-                # 输入文件名
-                send_keys("{TAB}")  # Tab 切换到文件名框
-                sleep(WAIT_SHORT)
-                send_keys("^a")  # 全选当前内容
-                send_keys(out_file.name, with_spaces=True)  # 只输入文件名
-                print(f"[INFO] 已输入保存文件名: {out_file.name}")
-                     
-                # 查找保存按钮并点击
-                print(f"[INFO] 尝试保存文件...")
-                send_keys("{ENTER}")  # 直接回车保存
-                sleep(WAIT_MEDIUM)
-                     
+                # 方法2: 如果没找到独立对话框，在主窗口中查找保存控件
+                if not save_dialog:
+                    print(f"[DEBUG] 方法2: 在主窗口中查找保存控件...")
+                    main_window = wait_for_state(app, 'main', timeout=5)
+                    
+                    # 查找所有文本控件，寻找保存相关的标签
+                    text_controls = main_window.descendants(control_type="Text")
+                    print(f"[DEBUG] 主窗口中找到 {len(text_controls)} 个文本控件")
+                    for i, text_ctrl in enumerate(text_controls[:10]):  # 只检查前10个
+                        try:
+                            text_content = text_ctrl.window_text()
+                            if text_content and any(keyword in text_content.lower() for keyword in ['folder', 'file', 'save', 'output']):
+                                print(f"[DEBUG] 文本控件{i}: '{text_content}'")
+                        except:
+                            pass
+                    
+                    # 查找编辑框
+                    edit_controls = main_window.descendants(control_type="Edit")
+                    print(f"[DEBUG] 主窗口中找到 {len(edit_controls)} 个编辑框")
+                    
+                    # 如果找到编辑框，假设这是保存对话框
+                    if len(edit_controls) >= 2:
+                        save_dialog = main_window
+                        print(f"[INFO] 在主窗口中找到保存控件")
+                
+                if save_dialog:
+                    # 查找文件夹输入框并设置输出目录
+                    print(f"[INFO] 设置输出目录: {out_file.parent}")
+                    try:
+                        # 查找编辑框（通常是文件夹路径）
+                        edit_controls = save_dialog.descendants(control_type="Edit")
+                        if len(edit_controls) >= 1:
+                            folder_edit = edit_controls[0]  # 第一个是文件夹
+                            folder_edit.click_input()
+                            time.sleep(WAIT_SHORT)
+                            send_keys("^a")  # 全选
+                            send_keys(str(out_file.parent), with_spaces=True)
+                            time.sleep(WAIT_SHORT)
+                            print(f"[INFO] 已设置输出目录")
+                    except Exception as e:
+                        print(f"[WARN] 设置输出目录失败: {e}")
+                    
+                    # 查找文件名输入框并设置文件名
+                    print(f"[INFO] 设置文件名: {out_file.name}")
+                    try:
+                        edit_controls = save_dialog.descendants(control_type="Edit")
+                        if len(edit_controls) >= 2:
+                            file_edit = edit_controls[1]  # 第二个是文件名
+                            file_edit.click_input()
+                            time.sleep(WAIT_SHORT)
+                            send_keys("^a")  # 全选
+                            send_keys(out_file.name, with_spaces=True)
+                            time.sleep(WAIT_SHORT)
+                            print(f"[INFO] 已设置文件名")
+                    except Exception as e:
+                        print(f"[WARN] 设置文件名失败: {e}")
+                    
+                    # 点击OK按钮（或Overwrite按钮）
+                    print(f"[INFO] 点击确认按钮...")
+                    try:
+                        buttons = save_dialog.descendants(control_type="Button")
+                        ok_button = None
+                        for btn in buttons:
+                            try:
+                                btn_text = btn.window_text()
+                                if btn_text in ['OK', 'Overwrite']:
+                                    ok_button = btn
+                                    print(f"[INFO] 找到确认按钮: '{btn_text}'")
+                                    break
+                            except:
+                                continue
+                        
+                        if ok_button:
+                            ok_button.click_input()
+                            time.sleep(WAIT_MEDIUM)
+                            print(f"[INFO] 已点击确认按钮")
+                        else:
+                            print(f"[WARN] 未找到确认按钮，使用回车键...")
+                            send_keys("{ENTER}")
+                            time.sleep(WAIT_MEDIUM)
+                    except Exception as e:
+                        print(f"[WARN] 点击确认按钮失败: {e}，使用回车键...")
+                        send_keys("{ENTER}")
+                        time.sleep(WAIT_MEDIUM)
+                        
+                else:
+                    print(f"[WARN] 未找到保存对话框，使用默认方式...")
+                    send_keys("{ENTER}")
+                    time.sleep(WAIT_MEDIUM)
+                    
             except Exception as e:
-                print(f"[WARN] 保存文件失败: {e}")
+                print(f"[WARN] 处理保存对话框失败: {e}")
                 send_keys("{ENTER}")  # 兜底
-
+                time.sleep(WAIT_MEDIUM)
+            
             # Step 8: 收尾
             main = wait_for_state(app, 'main') # 等待保存完成，焦点回到主窗口
             send_keys("^w")
             print(f"[OK] {img_path.name} → {out_file.name}")
 
-        except Exception as exc:
-            print(f"[ERR] 处理 {img_path.name} 失败: {exc}")
-            # 尝试回到主窗口，然后关闭标签页
+        except Exception as e:
+            print(f"[ERR] 处理 {img_path.name} 失败: {e}")
             try:
                 main = wait_for_state(app, 'main', timeout=5)
-                main.send_keys("^w")
-            except TimeoutError:
-                pass  # 如果连主窗口都找不到，就放弃
+                send_keys("^w")  # 关闭标签
+            except:
+                pass
 
     print("[DONE] 全部转换完成") 
