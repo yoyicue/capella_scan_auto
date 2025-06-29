@@ -667,6 +667,13 @@ if __name__ == "__main__":
             try:
                 tprint("关闭程序...")
                 main = wait_for_state(app, 'main', timeout=5)
-                send_keys("%{F4}")  # Alt+F4 关闭程序
+                # 通过菜单栏优雅退出
+                try:
+                    # 使用menu_select()方法来优雅退出
+                    main.menu_select("File->Exit")
+                    tprint("已通过菜单栏退出程序")
+                except Exception as e:
+                    tprint(f"菜单栏退出失败，回退到Alt+F4: {e}", "WARN")
+                    send_keys("%{F4}")  # 兜底
             except:
                 pass 
