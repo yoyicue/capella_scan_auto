@@ -656,7 +656,7 @@ if __name__ == "__main__":
     try:
         # 检查管理员权限
         if not ctypes.windll.shell32.IsUserAnAdmin():
-            sys.exit("[ERR] 请右键 '以管理员身份运行' 本脚本，否则无法强制终止 capscan.exe")
+            tprint("未以管理员身份运行，可能无法强制终止 capscan.exe 进程。建议使用管理员权限。", "WARN")
         
         # 尝试连接已存在的实例，如果失败则启动新实例
         try:
