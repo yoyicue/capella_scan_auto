@@ -60,6 +60,29 @@ WAIT_PROCESS = 5.0  # 进程等待：程序启动、识别完成
 # 帮助函数
 # -----------------------------------------------------------------------------
 
+def wait_until(predicate, timeout: float = 10.0, interval: float = 0.2, desc: str = "condition") -> bool:
+    """轮询 predicate 直到返回 True 或超时。
+
+    Args:
+        predicate: 可调用对象，返回 True 表示条件满足。
+        timeout: 最大等待时间（秒）。
+        interval: 轮询间隔（秒）。
+        desc: 日志描述。
+
+    Returns:
+        bool: 是否在超时前满足条件。
+    """
+    start_time = time.time()
+    while time.time() - start_time < timeout:
+        try:
+            if predicate():
+                return True
+        except Exception:
+            pass
+        sleep(interval)
+    print(f"[WARN] 等待 {desc} 超时({timeout}s)")
+    return False
+
 def connect_or_start() -> Application:
     """启动或连接单实例的 capscan.exe"""
     # 直接启动新实例（因为在调用前已经清理了旧进程）
@@ -68,9 +91,19 @@ def connect_or_start() -> Application:
         exe_path = Path(CAPSCAN_EXE)
         exe_dir = exe_path.parent
         subprocess.Popen(str(exe_path), cwd=str(exe_dir))
-        # 等待程序初始化
-        sleep(WAIT_PROCESS)
-        app = Application(backend="uia").connect(path=CAPSCAN_EXE, timeout=20)
+
+        # 轮询等待进程就绪，而非固定休眠
+        def _can_connect():
+            try:
+                Application(backend="uia").connect(path=CAPSCAN_EXE, timeout=1)
+                return True
+            except Exception:
+                return False
+
+        if not wait_until(_can_connect, timeout=WAIT_PROCESS * 2, interval=0.5, desc="capscan.exe 启动"):
+            raise RuntimeError("capscan.exe 启动超时")
+
+        app = Application(backend="uia").connect(path=CAPSCAN_EXE, timeout=5)
         print(f"[INFO] 已启动并连接到新实例 (PID: {app.process})。")
         return app
     except Exception as e:
@@ -201,6 +234,32 @@ def wait_recognition_finished_backup(main_window, timeout=30):
     
     return True  # 备用方法默认返回成功
 
+def wait_for_save_dialog(main_window, timeout: float = 10.0, interval: float = 0.2) -> bool:
+    """等待保存对话框相关控件（Edit / OK 按钮）出现在主窗口。
+
+    由于 Capella-scan 的保存对话框是嵌入在主窗口中的 Qt 子对话框，
+    无法通过独立窗口检测，因此采用控件特征轮询。
+    """
+    def _has_save_controls() -> bool:
+        try:
+            if not main_window.exists():
+                return False
+            edits = main_window.descendants(control_type="Edit")
+            if len(edits) >= 2:
+                return True
+            buttons = main_window.descendants(control_type="Button")
+            for btn in buttons:
+                try:
+                    if btn.window_text() in ("OK", "Overwrite", "保存", "Save"):
+                        return True
+                except Exception:
+                    continue
+        except Exception:
+            pass
+        return False
+
+    return wait_until(_has_save_controls, timeout=timeout, interval=interval, desc="保存对话框出现")
+
 def process_single_file(app: Application, img_path: Path) -> bool:
     """处理单个文件的完整流程"""
     try:
@@ -285,9 +344,7 @@ def process_single_file(app: Application, img_path: Path) -> bool:
             print(f"[INFO] 使用 F5 快捷键作为兜底...")
             send_keys("{F5}")  # 兜底
             
-        # 等待一下让识别开始
-        time.sleep(WAIT_MEDIUM)
-        
+        # 不再固定等待，直接进入识别完成检测
         print(f"[INFO] 等待识别完成...")
         # 尝试两种方法检测识别完成
         recognition_finished = wait_recognition_finished(main)
@@ -316,20 +373,19 @@ def process_single_file(app: Application, img_path: Path) -> bool:
         main.set_focus()
         time.sleep(WAIT_SHORT)
         
-        # 使用快捷键保存
+        # 发送保存快捷键
         print(f"[INFO] 发送保存快捷键 Shift+Ctrl+M...")
         send_keys("+^m")  # Shift+Ctrl+M
-        time.sleep(WAIT_MEDIUM)
+
+        # 事件机制：等待保存对话框控件出现，而非独立窗口
+        if not wait_for_save_dialog(main, timeout=10):
+            print(f"[WARN] 未检测到保存控件，继续兜底处理")
         
-        # 等待保存对话框出现
-        print(f"[INFO] 等待保存对话框...")
-        time.sleep(WAIT_LONG)
-        
-        # 处理保存对话框（简化版本）
+        # 调用原有保存逻辑以实际设置目录和文件名
         if handle_save_dialog(app, out_file):
-            print(f"[INFO] 保存成功")
+            print("[INFO] 保存成功")
         else:
-            print(f"[WARN] 保存可能失败")
+            print("[WARN] 保存可能失败")
         
         # Step 5: 收尾
         main = wait_for_state(app, 'main') # 等待保存完成，焦点回到主窗口
