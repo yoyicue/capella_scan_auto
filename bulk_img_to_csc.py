@@ -56,6 +56,9 @@ WAIT_MEDIUM = 1.0   # 中等待：对话框出现、文件加载
 WAIT_LONG = 2.0     # 长等待：目录导航、程序启动
 WAIT_PROCESS = 5.0  # 进程等待：程序启动、识别完成
 
+# 全局状态跟踪
+_dialog_directory_set = False  # FileDialog 是否已设置正确目录
+
 # -----------------------------------------------------------------------------
 # 帮助函数
 # -----------------------------------------------------------------------------
@@ -260,58 +263,96 @@ def wait_for_save_dialog(main_window, timeout: float = 10.0, interval: float = 0
 
     return wait_until(_has_save_controls, timeout=timeout, interval=interval, desc="保存对话框出现")
 
+def try_command_line_open(img_path: Path) -> bool:
+    """尝试通过命令行参数直接打开文件（最高效方式）"""
+    try:
+        print(f"[INFO] 尝试命令行直接打开: {img_path}")
+        # 构造命令行
+        cmd = f'"{CAPSCAN_EXE}" "{img_path}"'
+        
+        # 执行命令（非阻塞）
+        result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=10)
+        
+        if result.returncode == 0:
+            print(f"[INFO] 命令行打开成功")
+            return True
+        else:
+            print(f"[DEBUG] 命令行打开失败: {result.stderr}")
+            return False
+            
+    except Exception as e:
+        print(f"[DEBUG] 命令行方式异常: {e}")
+        return False
+
+def smart_open_file(open_dlg, img_path: Path) -> bool:
+    """智能打开文件：先检查当前目录，避免不必要的导航"""
+    global _dialog_directory_set
+    try:
+        if _dialog_directory_set:
+            # 目录已设置，直接输入文件名
+            print(f"[INFO] 复用已设置目录，直接选择: {img_path.name}")
+            send_keys("{F4}")  # F4 定位文件名框
+            sleep(WAIT_SHORT / 2)
+            send_keys("^a")  # 全选
+            send_keys(img_path.name, with_spaces=True)
+            sleep(WAIT_SHORT / 2)
+        else:
+            # 首次设置目录
+            print(f"[INFO] 首次设置目录: {img_path.parent}")
+            send_keys("^l")  # Ctrl+L 聚焦地址栏
+            sleep(WAIT_SHORT)
+            send_keys("^a")  # 全选地址栏
+            send_keys(str(img_path.parent), with_spaces=True)
+            send_keys("{ENTER}")
+            sleep(WAIT_LONG)  # 等待目录加载
+            
+            # 设置文件名
+            send_keys("{F4}")  # F4 定位文件名框
+            sleep(WAIT_SHORT)
+            send_keys("^a")
+            send_keys(img_path.name, with_spaces=True)
+            _dialog_directory_set = True  # 标记目录已设置
+        
+        # 确认打开文件
+        send_keys("{ENTER}")
+        sleep(WAIT_SHORT)
+        send_keys("%o")  # Alt+O 作为兜底
+        sleep(WAIT_MEDIUM)
+        return True
+        
+    except Exception as e:
+        print(f"[WARN] 智能文件打开失败: {e}")
+        return False
+
 def process_single_file(app: Application, img_path: Path) -> bool:
     """处理单个文件的完整流程"""
     try:
         # 确保当前是主窗口状态
         main = wait_for_state(app, 'main')
 
-        # Step 1: 触发打开文件
-        send_keys("^o")
-
-        # Step 2: 等待并操作 Open 对话框
-        open_dlg = wait_for_state(app, 'open')
+        # Step 1: 尝试高效方式打开文件
+        file_opened = False
         
-        # 导航并选择文件
-        try:
-            # 1. 先导航到目标目录
-            print(f"[INFO] 导航到目录: {img_path.parent}")
-            send_keys("^l")  # Ctrl+L 聚焦地址栏
-            sleep(WAIT_SHORT)
-            send_keys(str(img_path.parent), with_spaces=True)  # 输入目录路径
-            send_keys("{ENTER}")  # 确认导航
-            sleep(WAIT_LONG)  # 等待目录加载
+        # 方式1: 命令行参数（最高效，但可能不支持）
+        if try_command_line_open(img_path):
+            file_opened = True
+            print(f"[INFO] 使用命令行方式成功打开文件")
+        else:
+            # 方式2: UI 对话框（兜底方式）
+            print(f"[INFO] 使用 UI 对话框方式打开文件")
+            send_keys("^o")
+            open_dlg = wait_for_state(app, 'open')
             
-            # 2. 在目录中搜索文件
-            print(f"[INFO] 搜索文件: {img_path.name}")
-            send_keys("^f")  # Ctrl+F 打开搜索框
-            sleep(WAIT_SHORT)
-            send_keys(img_path.name, with_spaces=True)  # 输入完整文件名
-            send_keys("{ENTER}")  # 执行搜索并选中文件
-            sleep(WAIT_SHORT)
-            print(f"[INFO] 已搜索到文件: {img_path.name}")
-            
-        except Exception as e:
-            print(f"[WARN] 填写文件路径失败: {e}")
-            # 兜底方案: 直接在文件名框输入
-            send_keys("{F4}")  # F4 定位文件名框
-            sleep(WAIT_SHORT)
-            send_keys("^a")  # 全选
-            send_keys(img_path.name, with_spaces=True)
+            if not smart_open_file(open_dlg, img_path):
+                print(f"[WARN] UI 文件选择失败，跳过该文件")
+                return False
+            file_opened = True
         
-        # 确保文件被打开 - 多种尝试方式
-        print(f"[INFO] 尝试打开文件...")
+        if not file_opened:
+            print(f"[ERR] 所有文件打开方式均失败")
+            return False
         
-        # 多重尝试方法（之前成功的方式）
-        # 方式1: 先尝试 Enter
-        send_keys("{ENTER}")
-        sleep(WAIT_SHORT)
-        
-        # 方式2: 再尝试 Alt+O（"打开"按钮快捷键）
-        send_keys("%o")  # Alt+O 点击"打开"按钮
-        sleep(WAIT_MEDIUM)
-        
-        # Step 3: 等待主窗口恢复并启动识别
+        # Step 2: 等待主窗口恢复并启动识别
         main = wait_for_state(app, 'main') # 等待图像加载完毕
         print(f"[INFO] 图像已加载，准备启动识别...")
         
