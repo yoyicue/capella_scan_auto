@@ -50,10 +50,10 @@ CAPSCAN_EXE = r"C:\Program Files (x86)\capella-software\capella-scan 9\bin\capsc
 START_BTN_ID = "actionStartRecognition"
 SAVE_LEVEL_ID = "actionSave_Level_of_Recognition"
 
-# 全局等待时间配置（秒）
-WAIT_SHORT = 0.5    # 短等待：UI 响应、焦点切换
-WAIT_MEDIUM = 1.0   # 中等待：对话框出现、文件加载
-WAIT_LONG = 2.0     # 长等待：目录导航、程序启动
+# 全局等待时间配置（秒）- 优化后的配置
+WAIT_SHORT = 0.3    # 短等待：UI 响应、焦点切换 (从0.5秒优化为0.3秒)
+WAIT_MEDIUM = 0.8   # 中等待：对话框出现、文件加载 (从1.0秒优化为0.8秒)
+WAIT_LONG = 1.5     # 长等待：目录导航、程序启动 (从2.0秒优化为1.5秒)
 WAIT_PROCESS = 5.0  # 进程等待：程序启动、识别完成
 
 # 全局状态跟踪
@@ -190,7 +190,7 @@ def wait_for_state(app: Application, state: str, timeout: int = 20) -> 'WindowSp
             tprint(f"窗口检测异常: {e}", "DEBUG")
             pass
 
-        sleep(WAIT_SHORT / 5)  # 更频繁的检测
+        sleep(0.2)  # 优化：统一轮询间隔为0.2秒
     raise TimeoutError(f"等待 '{state}' 状态超时（{timeout}秒）")
 
 
@@ -226,21 +226,30 @@ def wait_recognition_finished(main_window, timeout=60):
     return False
 
 def wait_recognition_finished_backup(main_window, timeout=30):
-    """备用的识别完成检测方法"""
-    tprint(f"使用备用方法等待识别完成...", "DEBUG")
+    """备用的识别完成检测方法 - 优化版本"""
+    tprint(f"使用备用方法检测识别完成...", "DEBUG")
     
-    # 方法1: 简单等待固定时间（适用于小图片）
-    tprint(f"等待 {timeout} 秒让识别完成...")
-    time.sleep(timeout)
+    # 改为轮询检测而非固定等待
+    start_time = time.time()
+    while time.time() - start_time < timeout:
+        try:
+            # 检查窗口状态和响应性
+            if main_window.exists():
+                # 尝试获取窗口状态信息
+                try:
+                    texts = main_window.descendants(control_type="Text")
+                    # 如果能正常获取控件，认为界面稳定
+                    if len(texts) > 0:
+                        tprint(f"界面状态稳定，假设识别已完成")
+                        return True
+                except:
+                    pass
+        except:
+            pass
+        
+        time.sleep(2.0)  # 每2秒检查一次
     
-    # 方法2: 检查窗口是否还存在且响应
-    try:
-        if main_window.exists():
-            tprint(f"窗口仍然存在，假设识别已完成")
-            return True
-    except:
-        pass
-    
+    tprint(f"备用检测超时，假设识别完成", "WARN")
     return True  # 备用方法默认返回成功
 
 def wait_for_save_dialog(main_window, timeout: float = 10.0, interval: float = 0.2) -> bool:
@@ -253,16 +262,24 @@ def wait_for_save_dialog(main_window, timeout: float = 10.0, interval: float = 0
         try:
             if not main_window.exists():
                 return False
-            edits = main_window.descendants(control_type="Edit")
-            if len(edits) >= 2:
-                return True
+            
+            # 方法1：检测特定的保存按钮文本
             buttons = main_window.descendants(control_type="Button")
             for btn in buttons:
                 try:
-                    if btn.window_text() in ("OK", "Overwrite", "保存", "Save"):
+                    btn_text = btn.window_text()
+                    if btn_text in ("OK", "Overwrite", "保存", "Save"):
+                        tprint(f"检测到保存按钮: '{btn_text}'", "DEBUG")
                         return True
                 except Exception:
                     continue
+            
+            # 方法2：检测编辑框数量变化（作为辅助判断）
+            edits = main_window.descendants(control_type="Edit")
+            if len(edits) >= 8:  # 根据日志，保存对话框出现时有8个编辑框
+                tprint(f"检测到保存编辑框: {len(edits)}个", "DEBUG")
+                return True
+                
         except Exception:
             pass
         return False
@@ -291,39 +308,39 @@ def try_command_line_open(img_path: Path) -> bool:
         return False
 
 def smart_open_file(open_dlg, img_path: Path) -> bool:
-    """智能打开文件：先检查当前目录，避免不必要的导航"""
+    """智能打开文件：先检查当前目录，避免不必要的导航 - 优化版本"""
     global _dialog_directory_set
     try:
         if _dialog_directory_set:
             # 目录已设置，直接输入文件名
             tprint(f"复用已设置目录，直接选择: {img_path.name}")
             send_keys("{F4}")  # F4 定位文件名框
-            sleep(WAIT_SHORT / 2)
+            sleep(0.2)  # 优化：缩短等待时间
             send_keys("^a")  # 全选
             send_keys(img_path.name, with_spaces=True)
-            sleep(WAIT_SHORT / 2)
+            sleep(0.2)  # 优化：缩短等待时间
         else:
             # 首次设置目录
             tprint(f"首次设置目录: {img_path.parent}")
             send_keys("^l")  # Ctrl+L 聚焦地址栏
-            sleep(WAIT_SHORT)
+            sleep(0.2)  # 优化：缩短等待时间
             send_keys("^a")  # 全选地址栏
             send_keys(str(img_path.parent), with_spaces=True)
             send_keys("{ENTER}")
-            sleep(WAIT_LONG)  # 等待目录加载
+            sleep(1.0)  # 优化：目录加载等待时间从2秒缩短为1秒
             
             # 设置文件名
             send_keys("{F4}")  # F4 定位文件名框
-            sleep(WAIT_SHORT)
+            sleep(0.2)  # 优化：缩短等待时间
             send_keys("^a")
             send_keys(img_path.name, with_spaces=True)
             _dialog_directory_set = True  # 标记目录已设置
         
         # 确认打开文件
         send_keys("{ENTER}")
-        sleep(WAIT_SHORT)
+        sleep(0.2)  # 优化：缩短等待时间
         send_keys("%o")  # Alt+O 作为兜底
-        sleep(WAIT_MEDIUM)
+        sleep(0.6)  # 优化：缩短等待时间
         return True
         
     except Exception as e:
@@ -417,9 +434,6 @@ def process_single_file(app: Application, img_path: Path) -> bool:
         tprint(f"识别已完成！")
         tprint(f"识别耗时: {recognition_elapsed:.1f}s")
 
-        # 识别完成后，额外等待确保状态稳定
-        time.sleep(WAIT_LONG)
-        
         # Step 4: 保存为CSC格式
         save_start_time = time.time()
         tprint(f"准备保存 CSC 文件...")
@@ -428,17 +442,20 @@ def process_single_file(app: Application, img_path: Path) -> bool:
         out_file = OUTPUT_DIR / f"{img_path.stem}.csc"
         tprint(f"目标保存路径: {out_file}")
         
-        # 确保窗口有焦点
-        main.set_focus()
-        time.sleep(WAIT_SHORT)
+        # 优化：尝试确保窗口有焦点，但不强制等待
+        try:
+            main.set_focus()
+            time.sleep(0.1)  # 最小化焦点设置等待时间
+        except:
+            pass  # 如果焦点设置失败，继续执行
         
         # 发送保存快捷键
         tprint(f"发送保存快捷键 Shift+Ctrl+M...")
         send_keys("+^m")  # Shift+Ctrl+M
 
-        # 事件机制：等待保存对话框控件出现，而非独立窗口
-        if not wait_for_save_dialog(main, timeout=10):
-            tprint(f"未检测到保存控件，继续兜底处理", "WARN")
+        # 优化：缩短保存对话框检测超时时间
+        if not wait_for_save_dialog(main, timeout=3):
+            tprint(f"3秒内未检测到保存控件，继续兜底处理", "WARN")
         
         # 调用原有保存逻辑以实际设置目录和文件名
         if handle_save_dialog(app, out_file):
@@ -464,7 +481,7 @@ def process_single_file(app: Application, img_path: Path) -> bool:
         return False
 
 def handle_save_dialog(app: Application, out_file: Path) -> bool:
-    """处理保存对话框的简化版本"""
+    """处理保存对话框的简化版本 - 优化版本"""
     try:
         # 在主窗口中查找保存控件
         main_window = wait_for_state(app, 'main', timeout=5)
@@ -475,29 +492,46 @@ def handle_save_dialog(app: Application, out_file: Path) -> bool:
         
         # 如果找到编辑框，设置保存路径
         if len(edit_controls) >= 2:
-            # 设置输出目录
+            # 方法1：尝试直接设置完整路径（最高效）
             try:
+                # 尝试在第一个编辑框输入完整路径
+                first_edit = edit_controls[0]
+                first_edit.click_input()
+                time.sleep(0.1)
+                send_keys("^a")  # 全选
+                send_keys(str(out_file), with_spaces=True)  # 直接输入完整路径
+                time.sleep(0.1)
+                tprint(f"已设置完整路径: {out_file}")
+                
+                # 直接尝试确认
+                send_keys("{ENTER}")
+                time.sleep(0.3)
+                return True
+                
+            except Exception as e:
+                tprint(f"完整路径方式失败: {e}，尝试分步设置", "DEBUG")
+            
+            # 方法2：分步设置目录和文件名（兜底方式）
+            try:
+                # 设置输出目录
                 folder_edit = edit_controls[0]  # 第一个是文件夹
                 folder_edit.click_input()
-                time.sleep(WAIT_SHORT)
+                time.sleep(0.1)
                 send_keys("^a")  # 全选
                 send_keys(str(out_file.parent), with_spaces=True)
-                time.sleep(WAIT_SHORT)
+                time.sleep(0.1)
                 tprint(f"已设置输出目录")
-            except Exception as e:
-                tprint(f"设置输出目录失败: {e}", "WARN")
-            
-            # 设置文件名
-            try:
+                
+                # 设置文件名
                 file_edit = edit_controls[1]  # 第二个是文件名
                 file_edit.click_input()
-                time.sleep(WAIT_SHORT)
+                time.sleep(0.1)
                 send_keys("^a")  # 全选
                 send_keys(out_file.name, with_spaces=True)
-                time.sleep(WAIT_SHORT)
+                time.sleep(0.1)
                 tprint(f"已设置文件名")
             except Exception as e:
-                tprint(f"设置文件名失败: {e}", "WARN")
+                tprint(f"分步设置失败: {e}", "WARN")
             
             # 点击OK按钮
             try:
@@ -508,7 +542,7 @@ def handle_save_dialog(app: Application, out_file: Path) -> bool:
                         if btn_text in ['OK', 'Overwrite']:
                             tprint(f"点击确认按钮: '{btn_text}'")
                             btn.click_input()
-                            time.sleep(WAIT_MEDIUM)
+                            time.sleep(0.3)  # 进一步优化等待时间
                             return True
                     except:
                         continue
@@ -518,7 +552,7 @@ def handle_save_dialog(app: Application, out_file: Path) -> bool:
         # 兜底方案
         tprint(f"使用回车键确认保存...")
         send_keys("{ENTER}")
-        time.sleep(WAIT_MEDIUM)
+        time.sleep(0.3)  # 进一步优化等待时间
         return True
         
     except Exception as e:
@@ -594,9 +628,6 @@ if __name__ == "__main__":
         # 内层循环：逐个处理文件
         batch_start_time = time.time()
         success_count = 0
-        total_open_time = 0
-        total_recognition_time = 0
-        total_save_time = 0
         
         for i, img_path in enumerate(png_files, 1):
             tprint(f"=== 处理第 {i}/{len(png_files)} 个文件: {img_path.name} ===")
