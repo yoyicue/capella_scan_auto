@@ -13,10 +13,12 @@ import ctypes
 import sys
 import subprocess
 import time
+import psutil
 
 # 3rd-party
 from pywinauto import Application, Desktop
 from pywinauto.keyboard import send_keys
+from pywinauto.application import Application
 
 try:
     import win32con  # type: ignore
@@ -572,6 +574,33 @@ def handle_save_dialog(app: Application, out_file: Path) -> bool:
         send_keys("{ENTER}")  # 兜底
         return False
 
+def graceful_or_force_close(app: Application, timeout=8):
+    """先菜单退出，超时后强杀进程树"""
+    try:
+        main = wait_for_state(app, 'main', timeout=5)
+        main.menu_select("File->Exit")
+        if app.wait_for_process_exit(timeout=timeout):
+            tprint("已优雅退出")
+            return
+    except Exception:
+        pass
+    tprint("软退出失败，执行硬杀", "WARN")
+    try:
+        app.kill(soft=False)
+        tprint("已 TerminateProcess() 强杀")
+    except Exception as e:
+        tprint(f"app.kill() 仍失败: {e}", "ERR")
+
+def kill_tree(pid: int, timeout=5):
+    try:
+        parent = psutil.Process(pid)
+    except psutil.NoSuchProcess:
+        return
+    for p in parent.children(recursive=True):
+        p.kill()
+    parent.kill()
+    psutil.wait_procs([parent], timeout=timeout)
+
 # -----------------------------------------------------------------------------
 # 主逻辑
 # -----------------------------------------------------------------------------
@@ -625,6 +654,10 @@ if __name__ == "__main__":
     main = None
     
     try:
+        # 检查管理员权限
+        if not ctypes.windll.shell32.IsUserAnAdmin():
+            sys.exit("[ERR] 请右键 '以管理员身份运行' 本脚本，否则无法强制终止 capscan.exe")
+        
         # 尝试连接已存在的实例，如果失败则启动新实例
         try:
             app = Application(backend="uia").connect(path=CAPSCAN_EXE, timeout=5)
@@ -665,25 +698,32 @@ if __name__ == "__main__":
         # 清理：关闭程序
         if app:
             try:
-                tprint("关闭程序...")
+                tprint("优雅退出程序...")
                 main = wait_for_state(app, 'main', timeout=5)
-                # 通过菜单栏优雅退出
+                # 优先通过菜单栏优雅退出
                 try:
-                    # 使用menu_select()方法来优雅退出
                     main.menu_select("File->Exit")
-                    tprint("已通过菜单栏退出程序")
-                    
-                    # 等待程序进程退出
+                    tprint("已通过菜单栏优雅退出程序")
                     try:
                         app.wait_for_process_exit(timeout=5)
                         tprint("程序进程已成功退出")
                     except Exception as e:
                         tprint(f"等待程序退出超时: {e}", "WARN")
-                        # 如果等待超时，再尝试使用Alt+F4强制关闭
-                        send_keys("%{F4}")
-                        
+                        try:
+                            main.set_focus()
+                            send_keys("%{F4}")
+                            tprint("已发送Alt+F4强制关闭")
+                        except:
+                            tprint("发送Alt+F4失败", "WARN")
                 except Exception as e:
-                    tprint(f"菜单栏退出失败，回退到Alt+F4: {e}", "WARN")
-                    send_keys("%{F4}")  # 兜底
+                    tprint(f"菜单栏优雅退出失败，回退到Alt+F4: {e}", "WARN")
+                    send_keys("%{F4}")
             except:
-                pass 
+                pass
+
+        # 清理：清理所有旧的 capscan 进程
+        for p in psutil.process_iter(['pid', 'name']):
+            if p.info['name'] and p.info['name'].lower().startswith('capscan'):
+                kill_tree(p.info['pid'])
+
+        tprint("清理完成") 
