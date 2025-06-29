@@ -54,7 +54,7 @@ SAVE_LEVEL_ID = "actionSave_Level_of_Recognition"
 WAIT_SHORT = 0.5    # 短等待：UI 响应、焦点切换
 WAIT_MEDIUM = 1.0   # 中等待：对话框出现、文件加载
 WAIT_LONG = 2.0     # 长等待：目录导航、程序启动
-WAIT_PROCESS = 1.1  # 进程等待：程序启动、识别完成
+WAIT_PROCESS = 1.0  # 进程等待：程序启动、识别完成
 WAIT_SAVE_DIALOG = 0.8  # 保存对话框渲染等待：发送快捷键后等待对话框出现
 
 # 全局状态跟踪
@@ -264,7 +264,13 @@ def wait_for_save_dialog(main_window, timeout: float = 10.0, interval: float = 0
             if not main_window.exists():
                 return False
             
-            # 方法1：检测特定的保存按钮文本（优先级最高）
+            # 主要检测：编辑框数量变化（最可靠的特征）
+            edits = main_window.descendants(control_type="Edit")
+            if len(edits) >= 7:  # 根据日志，保存对话框出现时有8个编辑框，设为7个作为门槛
+                tprint(f"检测到保存编辑框: {len(edits)}个", "DEBUG")
+                return True
+            
+            # 辅助检测：保存按钮文本（降低优先级）
             buttons = main_window.descendants(control_type="Button")
             for btn in buttons:
                 try:
@@ -274,21 +280,6 @@ def wait_for_save_dialog(main_window, timeout: float = 10.0, interval: float = 0
                         return True
                 except Exception:
                     continue
-            
-            # 方法2：检测编辑框数量变化（降低门槛）
-            edits = main_window.descendants(control_type="Edit")
-            if len(edits) >= 5:  # 降低门槛：5个以上编辑框就认为对话框可能出现了
-                tprint(f"检测到保存编辑框: {len(edits)}个", "DEBUG")
-                return True
-            
-            # 方法3：检测窗口标题变化（新增）
-            try:
-                title = main_window.window_text()
-                if '*' in title:  # 窗口标题包含*表示有未保存内容，可能对话框已出现
-                    tprint(f"检测到窗口标题变化: '{title}'", "DEBUG")
-                    return True
-            except:
-                pass
             
         except Exception:
             pass
