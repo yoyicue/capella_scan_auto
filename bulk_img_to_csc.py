@@ -487,7 +487,7 @@ def process_single_file(app: Application, img_path: Path) -> bool:
         return False
 
 def handle_save_dialog(app: Application, out_file: Path) -> bool:
-    """处理保存对话框的简化版本 - 优化版本"""
+    """处理保存对话框的优化版本 - 减少等待时间"""
     try:
         # 在主窗口中查找保存控件
         main_window = wait_for_state(app, 'main', timeout=5)
@@ -498,48 +498,56 @@ def handle_save_dialog(app: Application, out_file: Path) -> bool:
         
         # 如果找到编辑框，设置保存路径
         if len(edit_controls) >= 2:
-            # 正确的方式：分别设置目录和文件名
+            # 优化：减少等待时间，提高操作效率
             try:
                 # 设置输出目录
                 folder_edit = edit_controls[0]  # 第一个是文件夹
                 folder_edit.click_input()
-                time.sleep(0.1)
+                time.sleep(0.05)  # 优化：从0.1s减少到0.05s
                 send_keys("^a")  # 全选
                 send_keys(str(out_file.parent), with_spaces=True)
-                time.sleep(0.1)
+                time.sleep(0.05)  # 优化：从0.1s减少到0.05s
                 tprint(f"已设置输出目录: {out_file.parent}")
                 
                 # 设置文件名
                 file_edit = edit_controls[1]  # 第二个是文件名
                 file_edit.click_input()
-                time.sleep(0.1)
+                time.sleep(0.05)  # 优化：从0.1s减少到0.05s
                 send_keys("^a")  # 全选
                 send_keys(out_file.name, with_spaces=True)
-                time.sleep(0.1)
+                time.sleep(0.05)  # 优化：从0.1s减少到0.05s
                 tprint(f"已设置文件名: {out_file.name}")
             except Exception as e:
                 tprint(f"设置路径失败: {e}", "WARN")
             
-            # 点击OK按钮
+            # 优化：先尝试快捷键，再查找按钮
             try:
-                buttons = main_window.descendants(control_type="Button")
-                for btn in buttons:
-                    try:
-                        btn_text = btn.window_text()
-                        if btn_text in ['OK', 'Overwrite']:
-                            tprint(f"点击确认按钮: '{btn_text}'")
-                            btn.click_input()
-                            time.sleep(0.3)  # 进一步优化等待时间
-                            return True
-                    except:
-                        continue
-            except Exception as e:
-                tprint(f"点击确认按钮失败: {e}", "WARN")
+                # 方法1: 直接使用Enter键（最快）
+                send_keys("{ENTER}")
+                time.sleep(0.1)  # 优化：从0.3s减少到0.1s
+                tprint(f"使用Enter键确认保存")
+                return True
+            except Exception:
+                # 方法2: 查找OK按钮（兜底）
+                try:
+                    buttons = main_window.descendants(control_type="Button")
+                    for btn in buttons:
+                        try:
+                            btn_text = btn.window_text()
+                            if btn_text in ['OK', 'Overwrite']:
+                                tprint(f"点击确认按钮: '{btn_text}'")
+                                btn.click_input()
+                                time.sleep(0.1)  # 优化：从0.3s减少到0.1s
+                                return True
+                        except:
+                            continue
+                except Exception as e:
+                    tprint(f"点击确认按钮失败: {e}", "WARN")
         
         # 兜底方案
         tprint(f"使用回车键确认保存...")
         send_keys("{ENTER}")
-        time.sleep(0.3)  # 进一步优化等待时间
+        time.sleep(0.1)  # 优化：从0.3s减少到0.1s
         return True
         
     except Exception as e:
