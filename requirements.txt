@@ -4,5 +4,8 @@ pywinauto==0.6.8
 # Windows API 支持
 pywin32>=306
 
+# 进程与系统监控
+psutil>=5.9.0
+
 # 类型注解支持（Python 3.9 以下需要）
 typing-extensions>=4.0.0; python_version<"3.10" 
