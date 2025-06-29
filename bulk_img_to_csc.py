@@ -58,6 +58,12 @@ WAIT_PROCESS = 5.0  # 进程等待：程序启动、识别完成
 
 # 全局状态跟踪
 _dialog_directory_set = False  # FileDialog 是否已设置正确目录
+_start_time = time.time()  # 程序启动时间基准
+
+def tprint(msg: str, level: str = "INFO") -> None:
+    """带时间戳的打印函数"""
+    elapsed = time.time() - _start_time
+    print(f"[{level}] [{elapsed:6.1f}s] {msg}")
 
 # -----------------------------------------------------------------------------
 # 帮助函数
@@ -83,13 +89,13 @@ def wait_until(predicate, timeout: float = 10.0, interval: float = 0.2, desc: st
         except Exception:
             pass
         sleep(interval)
-    print(f"[WARN] 等待 {desc} 超时({timeout}s)")
+    tprint(f"等待 {desc} 超时({timeout}s)", "WARN")
     return False
 
 def connect_or_start() -> Application:
     """启动或连接单实例的 capscan.exe"""
     # 直接启动新实例（因为在调用前已经清理了旧进程）
-    print("[INFO] 启动新的 capscan.exe 实例...")
+    tprint("启动新的 capscan.exe 实例...")
     try:
         exe_path = Path(CAPSCAN_EXE)
         exe_dir = exe_path.parent
@@ -107,7 +113,7 @@ def connect_or_start() -> Application:
             raise RuntimeError("capscan.exe 启动超时")
 
         app = Application(backend="uia").connect(path=CAPSCAN_EXE, timeout=5)
-        print(f"[INFO] 已启动并连接到新实例 (PID: {app.process})。")
+        tprint(f"已启动并连接到新实例 (PID: {app.process})")
         return app
     except Exception as e:
         sys.exit(f"[ERR] 启动并连接 capscan.exe 失败: {e}")
@@ -137,7 +143,7 @@ def wait_for_state(app: Application, state: str, timeout: int = 20) -> 'WindowSp
     轮询等待应用进入指定状态并返回该状态的窗口。
     状态: 'main', 'open', 'save'
     """
-    print(f"[STATE] 等待 '{state}' 窗口变为活动状态...")
+    tprint(f"等待 '{state}' 窗口变为活动状态...")
     for _ in range(timeout * 10):
         # 获取 capscan 进程的所有窗口
         try:
@@ -157,12 +163,12 @@ def wait_for_state(app: Application, state: str, timeout: int = 20) -> 'WindowSp
                         'capella-scan' in title.lower() or 
                         '.png' in title.lower() or 
                         '.csc' in title.lower()) and class_name == 'MainWindow':
-                        print(f"[STATE] 已检测到 'main' 窗口: '{title}'")
+                        tprint(f"已检测到 'main' 窗口: '{title}'")
                         return win
                 elif state == 'open' or state == 'save':
                     # 检查当前窗口是否为对话框
                     if is_file_dialog(win, state):
-                        print(f"[STATE] 已检测到 '{state}' 窗口: '{title}'")
+                        tprint(f"已检测到 '{state}' 窗口: '{title}'")
                         return win
                     
                     # 检查子窗口中是否有对话框
@@ -176,12 +182,12 @@ def wait_for_state(app: Application, state: str, timeout: int = 20) -> 'WindowSp
                             if (child_class == "#32770" and 
                                 ((state == 'open' and 'open' in child_title.lower()) or
                                  (state == 'save' and 'save' in child_title.lower()))):
-                                print(f"[STATE] 已检测到 '{state}' 子窗口: '{child_title}'")
+                                tprint(f"已检测到 '{state}' 子窗口: '{child_title}'")
                                 return child
                     except Exception:
                         pass
         except Exception as e:
-            print(f"[DEBUG] 窗口检测异常: {e}")
+            tprint(f"窗口检测异常: {e}", "DEBUG")
             pass
 
         sleep(WAIT_SHORT / 5)  # 更频繁的检测
@@ -190,7 +196,7 @@ def wait_for_state(app: Application, state: str, timeout: int = 20) -> 'WindowSp
 
 def wait_recognition_finished(main_window, timeout=60):
     """等待识别完成"""
-    print(f"[DEBUG] 开始等待识别完成（超时: {timeout}秒）...")
+    tprint(f"开始等待识别完成（超时: {timeout}秒）...")
     start_time = time.time()
     
     while time.time() - start_time < timeout:
@@ -198,7 +204,7 @@ def wait_recognition_finished(main_window, timeout=60):
             # 添加状态检查
             elapsed = int(time.time() - start_time)
             if elapsed % 5 == 0 and elapsed > 0:  # 每5秒输出一次状态
-                print(f"[DEBUG] 等待识别完成中... ({elapsed}s/{timeout}s)")
+                tprint(f"等待识别完成中... ({elapsed}s/{timeout}s)", "DEBUG")
             
             # 查找 "Result of recognition" 文本
             all_texts = main_window.descendants(control_type="Text")
@@ -206,31 +212,31 @@ def wait_recognition_finished(main_window, timeout=60):
                 try:
                     text_content = text_elem.window_text()
                     if 'Result of recognition' in text_content:
-                        print(f"[INFO] 检测到识别完成标志: '{text_content}'")
+                        tprint(f"检测到识别完成标志: '{text_content}'")
                         return True
                 except:
                     continue
                  
         except Exception as e:
-            print(f"[DEBUG] 检查识别状态时出错: {e}")
+            tprint(f"检查识别状态时出错: {e}", "DEBUG")
             
         time.sleep(WAIT_SHORT)
     
-    print(f"[WARN] 等待识别完成超时 ({timeout}秒)")
+    tprint(f"等待识别完成超时 ({timeout}秒)", "WARN")
     return False
 
 def wait_recognition_finished_backup(main_window, timeout=30):
     """备用的识别完成检测方法"""
-    print(f"[DEBUG] 使用备用方法等待识别完成...")
+    tprint(f"使用备用方法等待识别完成...", "DEBUG")
     
     # 方法1: 简单等待固定时间（适用于小图片）
-    print(f"[INFO] 等待 {timeout} 秒让识别完成...")
+    tprint(f"等待 {timeout} 秒让识别完成...")
     time.sleep(timeout)
     
     # 方法2: 检查窗口是否还存在且响应
     try:
         if main_window.exists():
-            print(f"[INFO] 窗口仍然存在，假设识别已完成")
+            tprint(f"窗口仍然存在，假设识别已完成")
             return True
     except:
         pass
@@ -266,7 +272,7 @@ def wait_for_save_dialog(main_window, timeout: float = 10.0, interval: float = 0
 def try_command_line_open(img_path: Path) -> bool:
     """尝试通过命令行参数直接打开文件（最高效方式）"""
     try:
-        print(f"[INFO] 尝试命令行直接打开: {img_path}")
+        tprint(f"尝试命令行直接打开: {img_path}")
         # 构造命令行
         cmd = f'"{CAPSCAN_EXE}" "{img_path}"'
         
@@ -274,14 +280,14 @@ def try_command_line_open(img_path: Path) -> bool:
         result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=10)
         
         if result.returncode == 0:
-            print(f"[INFO] 命令行打开成功")
+            tprint("命令行打开成功")
             return True
         else:
-            print(f"[DEBUG] 命令行打开失败: {result.stderr}")
+            tprint(f"命令行打开失败: {result.stderr}", "DEBUG")
             return False
             
     except Exception as e:
-        print(f"[DEBUG] 命令行方式异常: {e}")
+        tprint(f"命令行方式异常: {e}", "DEBUG")
         return False
 
 def smart_open_file(open_dlg, img_path: Path) -> bool:
@@ -290,7 +296,7 @@ def smart_open_file(open_dlg, img_path: Path) -> bool:
     try:
         if _dialog_directory_set:
             # 目录已设置，直接输入文件名
-            print(f"[INFO] 复用已设置目录，直接选择: {img_path.name}")
+            tprint(f"复用已设置目录，直接选择: {img_path.name}")
             send_keys("{F4}")  # F4 定位文件名框
             sleep(WAIT_SHORT / 2)
             send_keys("^a")  # 全选
@@ -298,7 +304,7 @@ def smart_open_file(open_dlg, img_path: Path) -> bool:
             sleep(WAIT_SHORT / 2)
         else:
             # 首次设置目录
-            print(f"[INFO] 首次设置目录: {img_path.parent}")
+            tprint(f"首次设置目录: {img_path.parent}")
             send_keys("^l")  # Ctrl+L 聚焦地址栏
             sleep(WAIT_SHORT)
             send_keys("^a")  # 全选地址栏
@@ -321,120 +327,135 @@ def smart_open_file(open_dlg, img_path: Path) -> bool:
         return True
         
     except Exception as e:
-        print(f"[WARN] 智能文件打开失败: {e}")
+        tprint(f"智能文件打开失败: {e}", "WARN")
         return False
 
 def process_single_file(app: Application, img_path: Path) -> bool:
     """处理单个文件的完整流程"""
+    file_start_time = time.time()
+    tprint(f"=== 开始处理文件: {img_path.name} ===")
+    
     try:
         # 确保当前是主窗口状态
         main = wait_for_state(app, 'main')
 
         # Step 1: 尝试高效方式打开文件
+        open_start_time = time.time()
         file_opened = False
         
         # 方式1: 命令行参数（最高效，但可能不支持）
         if try_command_line_open(img_path):
             file_opened = True
-            print(f"[INFO] 使用命令行方式成功打开文件")
+            tprint(f"使用命令行方式成功打开文件")
         else:
             # 方式2: UI 对话框（兜底方式）
-            print(f"[INFO] 使用 UI 对话框方式打开文件")
+            tprint(f"使用 UI 对话框方式打开文件")
             send_keys("^o")
             open_dlg = wait_for_state(app, 'open')
             
             if not smart_open_file(open_dlg, img_path):
-                print(f"[WARN] UI 文件选择失败，跳过该文件")
+                tprint(f"UI 文件选择失败，跳过该文件", "WARN")
                 return False
             file_opened = True
         
         if not file_opened:
-            print(f"[ERR] 所有文件打开方式均失败")
+            tprint(f"所有文件打开方式均失败", "ERR")
             return False
+        
+        open_elapsed = time.time() - open_start_time
+        tprint(f"文件打开耗时: {open_elapsed:.1f}s")
         
         # Step 2: 等待主窗口恢复并启动识别
         main = wait_for_state(app, 'main') # 等待图像加载完毕
-        print(f"[INFO] 图像已加载，准备启动识别...")
+        tprint(f"图像已加载，准备启动识别...")
+        
+        # 识别阶段计时
+        recognition_start_time = time.time()
         
         # 使用 descendants 查找开始识别按钮
         try:
-            print(f"[INFO] 查找开始识别按钮...")
+            tprint(f"查找开始识别按钮...")
             buttons = main.descendants(control_type="Button")
-            # 简化调试输出 - 不再显示所有按钮详情
-            print(f"[DEBUG] 找到 {len(buttons)} 个按钮")
+            tprint(f"找到 {len(buttons)} 个按钮", "DEBUG")
             
             start_btn = None
             for btn in buttons:
                 try:
                     btn_text = getattr(btn, 'window_text', lambda: '')()
                     if 'Start Recognition' in btn_text:
-                        print(f"[INFO] 找到开始识别按钮: '{btn_text}'")
+                        tprint(f"找到开始识别按钮: '{btn_text}'")
                         start_btn = btn
                         break
                 except:
                     continue
             
             if start_btn:
-                print(f"[INFO] 点击开始识别按钮...")
+                tprint(f"点击开始识别按钮...")
                 start_btn.click_input()
             else:
-                print(f"[WARN] 未找到识别按钮，使用 F5 快捷键...")
+                tprint(f"未找到识别按钮，使用 F5 快捷键...", "WARN")
                 send_keys("{F5}")
         except Exception as e:
-            print(f"[WARN] 点击开始识别按钮失败: {e}")
-            print(f"[INFO] 使用 F5 快捷键作为兜底...")
+            tprint(f"点击开始识别按钮失败: {e}", "WARN")
+            tprint(f"使用 F5 快捷键作为兜底...")
             send_keys("{F5}")  # 兜底
             
         # 不再固定等待，直接进入识别完成检测
-        print(f"[INFO] 等待识别完成...")
+        tprint(f"等待识别完成...")
         # 尝试两种方法检测识别完成
         recognition_finished = wait_recognition_finished(main)
         if not recognition_finished:
-            print(f"[INFO] 状态栏方法失败，尝试备用检测方法...")
+            tprint(f"状态栏方法失败，尝试备用检测方法...")
             recognition_finished = wait_recognition_finished_backup(main)
         
         if not recognition_finished:
-            print(f"[WARN] 识别 {img_path.name} 超时，跳过")
+            tprint(f"识别 {img_path.name} 超时，跳过", "WARN")
             send_keys("^w")  # 关闭标签
             return False
         
-        print(f"[INFO] 识别已完成！")
+        recognition_elapsed = time.time() - recognition_start_time
+        tprint(f"识别已完成！")
+        tprint(f"识别耗时: {recognition_elapsed:.1f}s")
 
         # 识别完成后，额外等待确保状态稳定
         time.sleep(WAIT_LONG)
         
         # Step 4: 保存为CSC格式
-        print(f"[INFO] 准备保存 CSC 文件...")
+        save_start_time = time.time()
+        tprint(f"准备保存 CSC 文件...")
         
         # 定义输出文件路径
         out_file = OUTPUT_DIR / f"{img_path.stem}.csc"
-        print(f"[INFO] 目标保存路径: {out_file}")
+        tprint(f"目标保存路径: {out_file}")
         
         # 确保窗口有焦点
         main.set_focus()
         time.sleep(WAIT_SHORT)
         
         # 发送保存快捷键
-        print(f"[INFO] 发送保存快捷键 Shift+Ctrl+M...")
+        tprint(f"发送保存快捷键 Shift+Ctrl+M...")
         send_keys("+^m")  # Shift+Ctrl+M
 
         # 事件机制：等待保存对话框控件出现，而非独立窗口
         if not wait_for_save_dialog(main, timeout=10):
-            print(f"[WARN] 未检测到保存控件，继续兜底处理")
+            tprint(f"未检测到保存控件，继续兜底处理", "WARN")
         
         # 调用原有保存逻辑以实际设置目录和文件名
         if handle_save_dialog(app, out_file):
-            print("[INFO] 保存成功")
+            tprint("保存成功")
         else:
-            print("[WARN] 保存可能失败")
+            tprint("保存可能失败", "WARN")
         
         # Step 5: 收尾
         main = wait_for_state(app, 'main') # 等待保存完成，焦点回到主窗口
         send_keys("^w")  # 关闭当前标签
+        
+        total_elapsed = time.time() - file_start_time
+        tprint(f"文件 {img_path.name} 处理完成！总耗时: {total_elapsed:.1f}s (打开:{open_elapsed:.1f}s, 识别:{recognition_elapsed:.1f}s, 保存:{save_elapsed:.1f}s)")
         return True
 
     except Exception as e:
-        print(f"[ERR] 处理 {img_path.name} 失败: {e}")
+        tprint(f"处理 {img_path.name} 失败: {e}", "ERR")
         try:
             main = wait_for_state(app, 'main', timeout=5)
             send_keys("^w")  # 关闭标签
@@ -450,7 +471,7 @@ def handle_save_dialog(app: Application, out_file: Path) -> bool:
         
         # 查找编辑框
         edit_controls = main_window.descendants(control_type="Edit")
-        print(f"[DEBUG] 找到 {len(edit_controls)} 个编辑框")
+        tprint(f"找到 {len(edit_controls)} 个编辑框", "DEBUG")
         
         # 如果找到编辑框，设置保存路径
         if len(edit_controls) >= 2:
@@ -462,9 +483,9 @@ def handle_save_dialog(app: Application, out_file: Path) -> bool:
                 send_keys("^a")  # 全选
                 send_keys(str(out_file.parent), with_spaces=True)
                 time.sleep(WAIT_SHORT)
-                print(f"[INFO] 已设置输出目录")
+                tprint(f"已设置输出目录")
             except Exception as e:
-                print(f"[WARN] 设置输出目录失败: {e}")
+                tprint(f"设置输出目录失败: {e}", "WARN")
             
             # 设置文件名
             try:
@@ -474,9 +495,9 @@ def handle_save_dialog(app: Application, out_file: Path) -> bool:
                 send_keys("^a")  # 全选
                 send_keys(out_file.name, with_spaces=True)
                 time.sleep(WAIT_SHORT)
-                print(f"[INFO] 已设置文件名")
+                tprint(f"已设置文件名")
             except Exception as e:
-                print(f"[WARN] 设置文件名失败: {e}")
+                tprint(f"设置文件名失败: {e}", "WARN")
             
             # 点击OK按钮
             try:
@@ -485,23 +506,23 @@ def handle_save_dialog(app: Application, out_file: Path) -> bool:
                     try:
                         btn_text = btn.window_text()
                         if btn_text in ['OK', 'Overwrite']:
-                            print(f"[INFO] 点击确认按钮: '{btn_text}'")
+                            tprint(f"点击确认按钮: '{btn_text}'")
                             btn.click_input()
                             time.sleep(WAIT_MEDIUM)
                             return True
                     except:
                         continue
             except Exception as e:
-                print(f"[WARN] 点击确认按钮失败: {e}")
+                tprint(f"点击确认按钮失败: {e}", "WARN")
         
         # 兜底方案
-        print(f"[INFO] 使用回车键确认保存...")
+        tprint(f"使用回车键确认保存...")
         send_keys("{ENTER}")
         time.sleep(WAIT_MEDIUM)
         return True
         
     except Exception as e:
-        print(f"[WARN] 处理保存对话框失败: {e}")
+        tprint(f"处理保存对话框失败: {e}", "WARN")
         send_keys("{ENTER}")  # 兜底
         return False
 
@@ -510,7 +531,7 @@ def handle_save_dialog(app: Application, out_file: Path) -> bool:
 # -----------------------------------------------------------------------------
 if __name__ == "__main__":
     # 调试阶段：清理所有旧的 capscan 进程
-    print("[INFO] 清理环境：强制关闭所有旧的 capscan.exe 实例...")
+    tprint("清理环境：强制关闭所有旧的 capscan.exe 实例...")
     
     # 方法1: 使用taskkill强制终止
     subprocess.run("taskkill /F /IM capscan.exe /T", capture_output=True, check=False)
@@ -524,21 +545,21 @@ if __name__ == "__main__":
         result = subprocess.run("tasklist /FI \"IMAGENAME eq capscan.exe\"", 
                               capture_output=True, text=True, check=False)
         if "capscan.exe" not in result.stdout:
-            print("[INFO] 旧进程已完全清理。")
+            tprint("旧进程已完全清理。")
             break
         else:
-            print(f"[DEBUG] 第{attempt+1}次清理尝试，仍有capscan进程运行...")
+            tprint(f"第{attempt+1}次清理尝试，仍有capscan进程运行...", "DEBUG")
             # 再次尝试强制清理
             subprocess.run("taskkill /F /IM capscan.exe /T", capture_output=True, check=False)
         sleep(WAIT_MEDIUM)
     else:
-        print("[WARN] 经过多次尝试仍有旧进程存在，可能需要手动清理或重启系统...")
+        tprint("经过多次尝试仍有旧进程存在，可能需要手动清理或重启系统...", "WARN")
         # 显示剩余进程信息
         result = subprocess.run(["powershell", "-Command", "Get-Process -Name 'capscan' -ErrorAction SilentlyContinue | Select-Object Id, ProcessName"], 
                               capture_output=True, text=True, check=False)
         if result.stdout.strip():
-            print(f"[DEBUG] 剩余进程信息:\n{result.stdout}")
-        print("[INFO] 继续执行，但可能会有冲突...")
+            tprint(f"剩余进程信息:\n{result.stdout}", "DEBUG")
+        tprint("继续执行，但可能会有冲突...", "WARN")
     
     # 环境检查
     if not INPUT_DIR.exists():
@@ -550,10 +571,10 @@ if __name__ == "__main__":
     if not png_files:
         sys.exit(f"[INFO] {INPUT_DIR} 下未找到 *.png 文件")
 
-    print(f"[INFO] 找到 {len(png_files)} 个PNG文件待处理")
+    tprint(f"找到 {len(png_files)} 个PNG文件待处理")
     
     # 启动程序（只启动一次）
-    print("[INFO] 启动 Capella-scan 程序...")
+    tprint("启动 Capella-scan 程序...")
     app = None
     main = None
     
@@ -561,36 +582,47 @@ if __name__ == "__main__":
         # 尝试连接已存在的实例，如果失败则启动新实例
         try:
             app = Application(backend="uia").connect(path=CAPSCAN_EXE, timeout=5)
-            print(f"[INFO] 连接到现有实例 (PID: {app.process})")
+            tprint(f"连接到现有实例 (PID: {app.process})")
         except:
-            print("[INFO] 未找到现有实例，启动新程序...")
+            tprint("未找到现有实例，启动新程序...")
             app = connect_or_start()
         
         # 等待主窗口就绪
         main = wait_for_state(app, 'main')
-        print(f"[INFO] 程序已就绪，开始批量处理...")
+        tprint(f"程序已就绪，开始批量处理...")
         
         # 内层循环：逐个处理文件
+        batch_start_time = time.time()
         success_count = 0
+        total_open_time = 0
+        total_recognition_time = 0
+        total_save_time = 0
+        
         for i, img_path in enumerate(png_files, 1):
-            print(f"\n[INFO] === 处理第 {i}/{len(png_files)} 个文件: {img_path.name} ===")
+            tprint(f"=== 处理第 {i}/{len(png_files)} 个文件: {img_path.name} ===")
             
             if process_single_file(app, img_path):
                 success_count += 1
-                print(f"[OK] {img_path.name} 处理成功")
+                tprint(f"{img_path.name} 处理成功", "OK")
             else:
-                print(f"[ERR] {img_path.name} 处理失败")
+                tprint(f"{img_path.name} 处理失败", "ERR")
         
-        print(f"\n[DONE] 批量处理完成！成功: {success_count}/{len(png_files)}")
+        batch_elapsed = time.time() - batch_start_time
+        tprint(f"批量处理完成！成功: {success_count}/{len(png_files)}", "DONE")
+        tprint(f"批量处理总耗时: {batch_elapsed:.1f}s")
+        if success_count > 0:
+            avg_time = batch_elapsed / len(png_files)
+            tprint(f"平均每文件耗时: {avg_time:.1f}s")
+            tprint(f"处理效率: {success_count/batch_elapsed*60:.1f} 文件/分钟")
         
     except Exception as e:
-        print(f"[ERR] 程序启动失败: {e}")
+        tprint(f"程序启动失败: {e}", "ERR")
         sys.exit(1)
     finally:
         # 清理：关闭程序
         if app:
             try:
-                print("[INFO] 关闭程序...")
+                tprint("关闭程序...")
                 main = wait_for_state(app, 'main', timeout=5)
                 send_keys("%{F4}")  # Alt+F4 关闭程序
             except:
