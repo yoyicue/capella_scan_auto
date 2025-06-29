@@ -45,12 +45,22 @@ WAIT_SAVE_DIALOG = 0.3  # 保存对话框渲染等待
 CAPSCAN_EXE = r"C:\Program Files (x86)\capella-software\capella-scan 9\bin\capscan.exe"
 ```
 
-## 日志输出
-脚本自带 `tprint()` 统一带时戳打印，方便观察各阶段耗时：
+## 性能表现
+经过多轮优化（包括减少固定等待、采用更快的 UIA 调用、并行化文件对话框操作等），脚本在处理单个标准 A4 琴谱 PNG 时，除核心识别（OCR）耗时外，额外开销可控制在 **2-3秒** 内。
+
+**日志输出示例:**
+脚本自带 `tprint()` 统一带时戳打印，方便观察各阶段耗时。
 ```
-[INFO] [  0.0s] 启动新的 capscan.exe 实例...
-[INFO] [ 12.4s] 识别已完成！
-[INFO] [ 15.8s] 文件 xxx.png 处理完成！总耗时: 15.8s
+[INFO] [  0.0s] === 开始处理文件: score_page_1.png ===
+[INFO] [  1.2s] 文件打开耗时: 1.1s
+[INFO] [ 11.5s] 识别已完成！
+[INFO] [ 11.5s] 识别耗时: 10.3s
+[INFO] [ 12.8s] 保存耗时: 1.3s
+[OK]   [ 13.1s] 文件 score_page_1.png 处理成功
+...
+[DONE] [135.2s] 批量处理完成！成功: 10/10
+[INFO] [135.2s] 平均每文件耗时: 13.5s
+[INFO] [135.2s] 处理效率: 4.4 文件/分钟
 ```
 
 ## 常见问题
