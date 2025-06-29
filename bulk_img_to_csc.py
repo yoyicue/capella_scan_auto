@@ -457,8 +457,13 @@ def process_single_file(app: Application, img_path: Path) -> bool:
         # 给对话框一个短暂的渲染时间
         time.sleep(WAIT_SAVE_DIALOG)  # 等待对话框出现
 
-        # 检测保存对话框，但降低检测门槛
-        dialog_detected = wait_for_save_dialog(main, timeout=2)
+        # 重新获取最新的主窗口状态，确保检测的是最新的控件
+        try:
+            current_main = wait_for_state(app, 'main', timeout=2)
+            dialog_detected = wait_for_save_dialog(current_main, timeout=2)
+        except:
+            dialog_detected = False
+            
         if dialog_detected:
             tprint(f"成功检测到保存对话框")
         else:
