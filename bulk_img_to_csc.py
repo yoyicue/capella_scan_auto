@@ -214,56 +214,43 @@ if __name__ == "__main__":
             open_dlg = wait_for_state(app, 'open')
             # 查找文件名编辑框并填写路径
             try:
-                # 方法1: 先导航到目录，再选择文件
-                # 1.1 在地址栏输入目录路径
+                # 1. 先导航到目标目录
+                print(f"[INFO] 导航到目录: {img_path.parent}")
                 send_keys("^l")  # Ctrl+L 聚焦地址栏
                 sleep(WAIT_SHORT)
-                send_keys(str(img_path.parent), with_spaces=True)  # 输入目录路径（不加引号）
+                send_keys(str(img_path.parent), with_spaces=True)  # 输入目录路径
                 send_keys("{ENTER}")  # 确认导航
                 sleep(WAIT_LONG)  # 等待目录加载
                 
-                # 1.2 验证是否成功跳转到目标目录
-                # 通过检查当前路径或直接尝试输入文件名
+                # 2. 在目录中搜索文件
+                # 优化策略：直接搜索文件（速度优先）
+                print(f"[INFO] 搜索文件: {img_path.name}")
                 
-                # 1.3 在文件列表中选择文件
-                # 方式1: 直接输入文件名首字母快速定位
-                print(f"[INFO] 寻找文件: {img_path.name}")
-                send_keys(img_path.name[0])  # 输入文件名首字母，快速定位
+                send_keys("^f")  # Ctrl+F 打开搜索框
+                sleep(WAIT_SHORT)
+                send_keys(img_path.name, with_spaces=True)  # 输入完整文件名
+                send_keys("{ENTER}")  # 执行搜索并选中文件
                 sleep(WAIT_SHORT)
                 
-                # 方式2: 使用 Ctrl+F 搜索文件
-                # send_keys("^f")  # Ctrl+F 打开搜索
-                # sleep(WAIT_SHORT)
-                # send_keys(img_path.name, with_spaces=True)
-                # send_keys("{ENTER}")
-                
-                # 方式3: 直接在文件名框输入完整文件名
-                send_keys("{F4}")  # F4 通常会定位到文件名框
+                print(f"[INFO] 已搜索到文件: {img_path.name}")
+            except Exception as e:
+                print(f"[WARN] 填写文件路径失败: {e}")
+                # 兜底方案: 直接在文件名框输入
+                send_keys("{F4}")  # F4 定位文件名框
                 sleep(WAIT_SHORT)
                 send_keys("^a")  # 全选
                 send_keys(img_path.name, with_spaces=True)
                 
-                print(f"[INFO] 已定位文件: {img_path.name}")
-            except Exception as e:
-                print(f"[WARN] 填写文件路径失败: {e}")
-                # 兜底方案: 尝试直接输入文件名
-                send_keys("{F4}")
-                sleep(WAIT_SHORT)
-                send_keys("^a")
-                send_keys(img_path.name, with_spaces=True)
-                
             # 确保文件被打开 - 多种尝试方式
             print(f"[INFO] 尝试打开文件...")
-            # 方式1: 直接回车（如果文件已选中）
+            
+            # 多重尝试方法（之前成功的方式）
+            # 方式1: 先尝试 Enter
             send_keys("{ENTER}")
             sleep(WAIT_SHORT)
             
-            # 方式2: 双击文件（如果文件在列表中可见）
-            # send_keys("{ENTER}")  # 如果文件被选中，回车应该能打开
-            
-            # 方式3: 点击"打开"按钮
-            # 可以尝试 Alt+O 快捷键
-            send_keys("%o")  # Alt+O，通常是"打开"按钮的快捷键
+            # 方式2: 再尝试 Alt+O（"打开"按钮快捷键）
+            send_keys("%o")  # Alt+O 点击"打开"按钮
             sleep(WAIT_MEDIUM)
             
             # Step 5 & 6: 等待主窗口恢复并启动识别
