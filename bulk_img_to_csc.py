@@ -50,11 +50,12 @@ CAPSCAN_EXE = r"C:\Program Files (x86)\capella-software\capella-scan 9\bin\capsc
 START_BTN_ID = "actionStartRecognition"
 SAVE_LEVEL_ID = "actionSave_Level_of_Recognition"
 
-# 全局等待时间配置（秒）- 优化后的配置
-WAIT_SHORT = 0.3    # 短等待：UI 响应、焦点切换 (从0.5秒优化为0.3秒)
-WAIT_MEDIUM = 0.8   # 中等待：对话框出现、文件加载 (从1.0秒优化为0.8秒)
-WAIT_LONG = 1.5     # 长等待：目录导航、程序启动 (从2.0秒优化为1.5秒)
-WAIT_PROCESS = 5.0  # 进程等待：程序启动、识别完成
+# 全局等待时间配置（秒）
+WAIT_SHORT = 0.5    # 短等待：UI 响应、焦点切换
+WAIT_MEDIUM = 1.0   # 中等待：对话框出现、文件加载
+WAIT_LONG = 2.0     # 长等待：目录导航、程序启动
+WAIT_PROCESS = 1.1  # 进程等待：程序启动、识别完成
+WAIT_SAVE_DIALOG = 0.8  # 保存对话框渲染等待：发送快捷键后等待对话框出现
 
 # 全局状态跟踪
 _dialog_directory_set = False  # FileDialog 是否已设置正确目录
@@ -263,7 +264,7 @@ def wait_for_save_dialog(main_window, timeout: float = 10.0, interval: float = 0
             if not main_window.exists():
                 return False
             
-            # 方法1：检测特定的保存按钮文本
+            # 方法1：检测特定的保存按钮文本（优先级最高）
             buttons = main_window.descendants(control_type="Button")
             for btn in buttons:
                 try:
@@ -274,12 +275,21 @@ def wait_for_save_dialog(main_window, timeout: float = 10.0, interval: float = 0
                 except Exception:
                     continue
             
-            # 方法2：检测编辑框数量变化（作为辅助判断）
+            # 方法2：检测编辑框数量变化（降低门槛）
             edits = main_window.descendants(control_type="Edit")
-            if len(edits) >= 8:  # 根据日志，保存对话框出现时有8个编辑框
+            if len(edits) >= 5:  # 降低门槛：5个以上编辑框就认为对话框可能出现了
                 tprint(f"检测到保存编辑框: {len(edits)}个", "DEBUG")
                 return True
-                
+            
+            # 方法3：检测窗口标题变化（新增）
+            try:
+                title = main_window.window_text()
+                if '*' in title:  # 窗口标题包含*表示有未保存内容，可能对话框已出现
+                    tprint(f"检测到窗口标题变化: '{title}'", "DEBUG")
+                    return True
+            except:
+                pass
+            
         except Exception:
             pass
         return False
@@ -453,15 +463,24 @@ def process_single_file(app: Application, img_path: Path) -> bool:
         tprint(f"发送保存快捷键 Shift+Ctrl+M...")
         send_keys("+^m")  # Shift+Ctrl+M
 
-        # 优化：缩短保存对话框检测超时时间
-        if not wait_for_save_dialog(main, timeout=3):
-            tprint(f"3秒内未检测到保存控件，继续兜底处理", "WARN")
+        # 给对话框一个短暂的渲染时间
+        time.sleep(WAIT_SAVE_DIALOG)  # 等待对话框出现
+
+        # 检测保存对话框，但降低检测门槛
+        dialog_detected = wait_for_save_dialog(main, timeout=2)
+        if dialog_detected:
+            tprint(f"成功检测到保存对话框")
+        else:
+            tprint(f"未检测到保存对话框特征，直接尝试操作", "DEBUG")
         
-        # 调用原有保存逻辑以实际设置目录和文件名
+        # 无论是否检测到对话框，都尝试执行保存操作
         if handle_save_dialog(app, out_file):
             tprint("保存成功")
         else:
             tprint("保存可能失败", "WARN")
+        
+        save_elapsed = time.time() - save_start_time
+        tprint(f"保存耗时: {save_elapsed:.1f}s")
         
         # Step 5: 收尾
         main = wait_for_state(app, 'main') # 等待保存完成，焦点回到主窗口
