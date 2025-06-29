@@ -605,37 +605,21 @@ def kill_tree(pid: int, timeout=5):
 # 主逻辑
 # -----------------------------------------------------------------------------
 if __name__ == "__main__":
-    # 调试阶段：清理所有旧的 capscan 进程
-    tprint("清理环境：强制关闭所有旧的 capscan.exe 实例...")
-    
-    # 方法1: 使用taskkill强制终止
-    subprocess.run("taskkill /F /IM capscan.exe /T", capture_output=True, check=False)
-    
-    # 方法2: 使用PowerShell强制停止
-    subprocess.run(["powershell", "-Command", "Get-Process -Name 'capscan' -ErrorAction SilentlyContinue | Stop-Process -Force"], 
-                  capture_output=True, check=False)
-    
-    # 等待进程完全终止
-    for attempt in range(5):  # 最多等待5秒，增加重试次数
-        result = subprocess.run("tasklist /FI \"IMAGENAME eq capscan.exe\"", 
-                              capture_output=True, text=True, check=False)
-        if "capscan.exe" not in result.stdout:
-            tprint("旧进程已完全清理。")
-            break
-        else:
-            tprint(f"第{attempt+1}次清理尝试，仍有capscan进程运行...", "DEBUG")
-            # 再次尝试强制清理
-            subprocess.run("taskkill /F /IM capscan.exe /T", capture_output=True, check=False)
-        sleep(WAIT_MEDIUM)
+    tprint("清理环境：检查并强杀残留 capscan.exe 进程...")
+    killed_any = False
+    for p in psutil.process_iter(['pid', 'name']):
+        try:
+            if p.info['name'] and p.info['name'].lower() == 'capscan.exe':
+                tprint(f"发现残留进程 PID {p.pid}，尝试强杀...", "DEBUG")
+                kill_tree(p.pid)
+                killed_any = True
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            continue
+    if killed_any:
+        tprint("旧进程已完全清理。")
     else:
-        tprint("经过多次尝试仍有旧进程存在，可能需要手动清理或重启系统...", "WARN")
-        # 显示剩余进程信息
-        result = subprocess.run(["powershell", "-Command", "Get-Process -Name 'capscan' -ErrorAction SilentlyContinue | Select-Object Id, ProcessName"], 
-                              capture_output=True, text=True, check=False)
-        if result.stdout.strip():
-            tprint(f"剩余进程信息:\n{result.stdout}", "DEBUG")
-        tprint("继续执行，但可能会有冲突...", "WARN")
-    
+        tprint("未发现残留进程。")
+
     # 环境检查
     if not INPUT_DIR.exists():
         sys.exit(f"[ERR] 输入目录不存在: {INPUT_DIR}")
@@ -659,11 +643,23 @@ if __name__ == "__main__":
             tprint("未以管理员身份运行，可能无法强制终止 capscan.exe 进程。建议使用管理员权限。", "WARN")
         
         # 尝试连接已存在的实例，如果失败则启动新实例
-        try:
-            app = Application(backend="uia").connect(path=CAPSCAN_EXE, timeout=5)
-            tprint(f"连接到现有实例 (PID: {app.process})")
-        except:
-            tprint("未找到现有实例，启动新程序...")
+        capscan_running = any(
+            p.info['name'] and p.info['name'].lower() == 'capscan.exe'
+            for p in psutil.process_iter(['name'])
+        )
+        if capscan_running:
+            try:
+                app = Application(backend="uia").connect(path=CAPSCAN_EXE, timeout=1)
+                tprint(f"连接到现有实例 (PID: {app.process})")
+            except Exception:
+                tprint("检测到进程但 UIA 连接失败，重启新程序...", "WARN")
+                # 先尝试强杀再启动
+                for p in psutil.process_iter(['pid', 'name']):
+                    if p.info['name'] and p.info['name'].lower() == 'capscan.exe':
+                        kill_tree(p.info['pid'])
+                app = connect_or_start()
+        else:
+            tprint("未检测到 capscan 进程，启动新程序...")
             app = connect_or_start()
         
         # 等待主窗口就绪
