@@ -672,6 +672,16 @@ if __name__ == "__main__":
                     # 使用menu_select()方法来优雅退出
                     main.menu_select("File->Exit")
                     tprint("已通过菜单栏退出程序")
+                    
+                    # 等待程序进程退出
+                    try:
+                        app.wait_for_process_exit(timeout=5)
+                        tprint("程序进程已成功退出")
+                    except Exception as e:
+                        tprint(f"等待程序退出超时: {e}", "WARN")
+                        # 如果等待超时，再尝试使用Alt+F4强制关闭
+                        send_keys("%{F4}")
+                        
                 except Exception as e:
                     tprint(f"菜单栏退出失败，回退到Alt+F4: {e}", "WARN")
                     send_keys("%{F4}")  # 兜底
