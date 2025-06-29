@@ -1,7 +1,7 @@
 # Capella Scan Auto
 
 ## 项目简介
-本仓库通过 `bulk_img_to_csc.py` 脚本批量调用 **capella-scan 9**（Capella Software 出品）将位于 `img_in/` 目录下的 PNG 图片自动识别并保存为 `csc_out/` 目录中的 `.csc` 乐谱文件，旨在彻底解放重复点击劳动力。
+本仓库通过 `bulk_img_to_csc.py` 脚本批量调用 **capella-scan 9** 将位于 `img_in/` 目录下的 PNG 图片自动识别并保存为 `csc_out/` 目录中的 `.csc` 乐谱文件，旨在彻底解放重复点击劳动力。
 
 * **适用版本**：capella-scan 9.x（默认安装路径 `C:\Program Files (x86)\capella-software\capella-scan 9\bin\capscan.exe`）
 * **运行环境**：Windows 10/11 + Python 3.9+（x86/32-bit）
@@ -12,8 +12,6 @@
 capella_scan_auto/
 ├─ bulk_img_to_csc.py   # 主脚本（可直接运行）
 ├─ requirements.txt     # Python 依赖
-├─ img_in/              # 放待识别的 .png 图像
-├─ csc_out/             # 生成的 .csc 文件将存于此
 └─ README.md            # 说明文档
 ```
 
@@ -60,7 +58,6 @@ CAPSCAN_EXE = r"C:\Program Files (x86)\capella-software\capella-scan 9\bin\capsc
 | --- | --- |
 | `PermissionError`, 无法杀掉 capscan 进程 | 以**管理员** PowerShell 运行脚本 |
 | `pywinauto.uia_element_info.UIAElementInfoError` | 检查 capella-scan 版本；若为旧版请自行调整 UIA 控件匹配逻辑 |
-| Git 推送失败 `Permission denied (publickey)` | 生成并添加 SSH 公钥，或切换 https 方式 |
 
 ## 贡献
 欢迎提交 PR / Issue 共同完善！
