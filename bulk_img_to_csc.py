@@ -492,26 +492,7 @@ def handle_save_dialog(app: Application, out_file: Path) -> bool:
         
         # 如果找到编辑框，设置保存路径
         if len(edit_controls) >= 2:
-            # 方法1：尝试直接设置完整路径（最高效）
-            try:
-                # 尝试在第一个编辑框输入完整路径
-                first_edit = edit_controls[0]
-                first_edit.click_input()
-                time.sleep(0.1)
-                send_keys("^a")  # 全选
-                send_keys(str(out_file), with_spaces=True)  # 直接输入完整路径
-                time.sleep(0.1)
-                tprint(f"已设置完整路径: {out_file}")
-                
-                # 直接尝试确认
-                send_keys("{ENTER}")
-                time.sleep(0.3)
-                return True
-                
-            except Exception as e:
-                tprint(f"完整路径方式失败: {e}，尝试分步设置", "DEBUG")
-            
-            # 方法2：分步设置目录和文件名（兜底方式）
+            # 正确的方式：分别设置目录和文件名
             try:
                 # 设置输出目录
                 folder_edit = edit_controls[0]  # 第一个是文件夹
@@ -520,7 +501,7 @@ def handle_save_dialog(app: Application, out_file: Path) -> bool:
                 send_keys("^a")  # 全选
                 send_keys(str(out_file.parent), with_spaces=True)
                 time.sleep(0.1)
-                tprint(f"已设置输出目录")
+                tprint(f"已设置输出目录: {out_file.parent}")
                 
                 # 设置文件名
                 file_edit = edit_controls[1]  # 第二个是文件名
@@ -529,9 +510,9 @@ def handle_save_dialog(app: Application, out_file: Path) -> bool:
                 send_keys("^a")  # 全选
                 send_keys(out_file.name, with_spaces=True)
                 time.sleep(0.1)
-                tprint(f"已设置文件名")
+                tprint(f"已设置文件名: {out_file.name}")
             except Exception as e:
-                tprint(f"分步设置失败: {e}", "WARN")
+                tprint(f"设置路径失败: {e}", "WARN")
             
             # 点击OK按钮
             try:
