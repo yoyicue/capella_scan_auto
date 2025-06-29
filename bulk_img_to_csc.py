@@ -55,7 +55,7 @@ WAIT_SHORT = 0.5    # 短等待：UI 响应、焦点切换
 WAIT_MEDIUM = 1.0   # 中等待：对话框出现、文件加载
 WAIT_LONG = 2.0     # 长等待：目录导航、程序启动
 WAIT_PROCESS = 1.0  # 进程等待：程序启动、识别完成
-WAIT_SAVE_DIALOG = 0.8  # 保存对话框渲染等待：发送快捷键后等待对话框出现
+WAIT_SAVE_DIALOG = 0.3  # 保存对话框渲染等待：缩短以减少盲等
 
 # 全局状态跟踪
 _dialog_directory_set = False  # FileDialog 是否已设置正确目录
@@ -501,21 +501,38 @@ def handle_save_dialog(app: Application, out_file: Path) -> bool:
             # 优化：减少等待时间，提高操作效率
             try:
                 # 设置输出目录
-                folder_edit = edit_controls[0]  # 第一个是文件夹
-                folder_edit.click_input()
-                time.sleep(0.05)  # 优化：从0.1s减少到0.05s
-                send_keys("^a")  # 全选
-                send_keys(str(out_file.parent), with_spaces=True)
-                time.sleep(0.05)  # 优化：从0.1s减少到0.05s
+                folder_edit = edit_controls[0]  # 第一个是文件夹编辑框
+                try:
+                    # 首选：直接设置内容，避免逐字符输入的 50ms*len 延迟
+                    folder_edit.set_edit_text(str(out_file.parent))
+                except Exception:
+                    # 回退：使用剪贴板粘贴（仍比逐字符快）
+                    try:
+                        from pywinauto.clipboard import set_data  # 延迟导入
+                        set_data(str(out_file.parent))
+                        folder_edit.click_input()
+                        send_keys("^a{DEL}^v")
+                    except Exception:
+                        # 兜底：保持旧的逐字符方案
+                        folder_edit.click_input()
+                        send_keys("^a")
+                        send_keys(str(out_file.parent), with_spaces=True, pause=0.0)
                 tprint(f"已设置输出目录: {out_file.parent}")
                 
                 # 设置文件名
-                file_edit = edit_controls[1]  # 第二个是文件名
-                file_edit.click_input()
-                time.sleep(0.05)  # 优化：从0.1s减少到0.05s
-                send_keys("^a")  # 全选
-                send_keys(out_file.name, with_spaces=True)
-                time.sleep(0.05)  # 优化：从0.1s减少到0.05s
+                file_edit = edit_controls[1]  # 第二个是文件名编辑框
+                try:
+                    file_edit.set_edit_text(out_file.name)
+                except Exception:
+                    try:
+                        from pywinauto.clipboard import set_data
+                        set_data(out_file.name)
+                        file_edit.click_input()
+                        send_keys("^a{DEL}^v")
+                    except Exception:
+                        file_edit.click_input()
+                        send_keys("^a")
+                        send_keys(out_file.name, with_spaces=True, pause=0.0)
                 tprint(f"已设置文件名: {out_file.name}")
             except Exception as e:
                 tprint(f"设置路径失败: {e}", "WARN")
