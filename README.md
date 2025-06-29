@@ -66,7 +66,7 @@ CAPSCAN_EXE = r"C:\Program Files (x86)\capella-software\capella-scan 9\bin\capsc
 ## 常见问题
 | 现象 | 解决办法 |
 | --- | --- |
-| `PermissionError`, 无法杀掉 capscan 进程 | 以**管理员** PowerShell 运行脚本 |
+| `PermissionError`, 无法杀掉 capscan 进程 | 确保在**管理员权限的 32-bit 终端**中运行，参考“快速开始”指引。 |
 | `pywinauto.uia_element_info.UIAElementInfoError` | 检查 capella-scan 版本；若为旧版请自行调整 UIA 控件匹配逻辑 |
 
 ## 贡献
