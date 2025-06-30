@@ -1,9 +1,9 @@
 # Capella Scan Auto
 
 ## 项目简介
-本仓库通过 `bulk_img_to_csc.py` 脚本批量调用 **capella-scan 9** 将位于 `img_in/` 目录下的 PNG 图片自动识别并保存为 `csc_out/` 目录中的 `.csc` 乐谱文件，旨在彻底解放重复点击劳动力。
+本仓库通过 `bulk_img_to_csc.py` 脚本批量调用 **capella-scan 9** 将指定目录下的 PNG 图片自动识别并保存为 `.csc` 乐谱文件，旨在彻底解放重复点击劳动力。
 
-* **适用版本**：capella-scan 9.x（默认安装路径 `C:\Program Files (x86)\capella-software\capella-scan 9\bin\capscan.exe`）
+* **适用版本**：capella-scan 9.x（默认安装路径 `C:\Program Files (x86)\capella-software\capella-scan 9\bin\capscan.exe`，可自定义）
 * **运行环境**：Windows 10/11 + Python 3.9+（x86/32-bit）
 * **自动化框架**：pywinauto（UIA backend）
 
@@ -33,16 +33,19 @@ capella_scan_auto/
 ## 快速开始
 1. **首次运行：** 从 `config.ini.template` 复制一份并重命名为 `config.ini`。
 2. **配置路径：** 打开 `config.ini`，根据你的环境修改 `input_dir`（输入目录）、`output_dir`（输出目录）和 `capella_scan_exe`（程序路径）。
+   - 所有输入输出路径均通过 `config.ini` 配置，无需修改脚本。
+   - `img_in/` 和 `csc_out/` 仅为默认值，可自定义为任意有效目录。
 3. 将待识别的 PNG 图像放入你配置的 `input_dir` 目录。
 4. 打开 **管理员终端**（PowerShell 或 CMD），确保脚本具备强杀进程权限。
 5. 运行脚本：
    ```powershell
    python bulk_img_to_csc.py
-   ```6. 处理完成后，在 `csc_out/` 目录获取生成的 `.csc` 文件。
+   ```
+6. 处理完成后，在你配置的 `output_dir` 目录获取生成的 `.csc` 文件。
 
 ## 可调整参数
-所有路径配置均已移至 `config.ini` 文件，方便修改且不会被 git 提交覆盖。
-脚本顶部的 **全局等待时间配置** 仍可按需调整以适应不同机器性能。
+- 所有路径配置均已移至 `config.ini` 文件，方便修改且不会被 git 提交覆盖。
+- 脚本顶部的 **全局等待时间配置** 仍可按需调整以适应不同机器性能。
 ```python
 WAIT_SHORT = 0.5      # UI 短等待
 WAIT_SAVE_DIALOG = 0.3  # 保存对话框渲染等待
