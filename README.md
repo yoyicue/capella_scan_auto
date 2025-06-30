@@ -10,7 +10,8 @@
 ## 目录结构
 ```
 capella_scan_auto/
-├─ bulk_img_to_csc.py   # 主脚本（可直接运行）
+├─ bulk_img_to_csc.py   # 主脚本
+├─ config.ini.template  # 配置文件模板
 ├─ requirements.txt     # Python 依赖
 └─ README.md            # 说明文档
 ```
@@ -30,19 +31,21 @@ capella_scan_auto/
 3. **capella-scan**：需已正确安装并能手动运行
 
 ## 快速开始
-1. 将待识别的 PNG 图像放入 `img_in/` 目录。
-2. 打开 **管理员 x86 Native Tools Command Prompt for VS 2022**（或其他**管理员 32-bit 终端**），确保脚本与目标进程位宽一致并具备强杀进程权限。
-3. 运行脚本：
+1. **首次运行：** 从 `config.ini.template` 复制一份并重命名为 `config.ini`。
+2. **配置路径：** 打开 `config.ini`，根据你的环境修改 `input_dir`（输入目录）、`output_dir`（输出目录）和 `capella_scan_exe`（程序路径）。
+3. 将待识别的 PNG 图像放入你配置的 `input_dir` 目录。
+4. 打开 **管理员终端**（PowerShell 或 CMD），确保脚本具备强杀进程权限。
+5. 运行脚本：
    ```powershell
    python bulk_img_to_csc.py
-   ```4. 处理完成后，在 `csc_out/` 目录获取生成的 `.csc` 文件。
+   ```6. 处理完成后，在 `csc_out/` 目录获取生成的 `.csc` 文件。
 
 ## 可调整参数
-脚本顶部的 **全局等待时间配置** 与 capella-scan 安装路径均可按需修改。
+所有路径配置均已移至 `config.ini` 文件，方便修改且不会被 git 提交覆盖。
+脚本顶部的 **全局等待时间配置** 仍可按需调整以适应不同机器性能。
 ```python
 WAIT_SHORT = 0.5      # UI 短等待
 WAIT_SAVE_DIALOG = 0.3  # 保存对话框渲染等待
-CAPSCAN_EXE = r"C:\Program Files (x86)\capella-software\capella-scan 9\bin\capscan.exe"
 ```
 
 ## 性能表现
@@ -66,7 +69,7 @@ CAPSCAN_EXE = r"C:\Program Files (x86)\capella-software\capella-scan 9\bin\capsc
 ## 常见问题
 | 现象 | 解决办法 |
 | --- | --- |
-| `PermissionError`, 无法杀掉 capscan 进程 | 确保在**管理员权限的 32-bit 终端**中运行，参考“快速开始”指引。 |
+| `PermissionError`, 无法杀掉 capscan 进程 | 确保在**管理员权限的 32-bit 终端**中运行，参考"快速开始"指引。 |
 | `pywinauto.uia_element_info.UIAElementInfoError` | 检查 capella-scan 版本；若为旧版请自行调整 UIA 控件匹配逻辑 |
 
 ## 贡献
