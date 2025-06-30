@@ -437,7 +437,7 @@ def process_single_file(app: Application, img_path: Path) -> bool:
         
         if not recognition_finished:
             tprint(f"识别 {img_path.name} 超时，跳过", "WARN")
-            send_keys("^w")  # 关闭标签
+            send_keys("^({F4})")  # 关闭当前标签（Ctrl+F4）
             return False
         
         recognition_elapsed = time.time() - recognition_start_time
@@ -480,7 +480,7 @@ def process_single_file(app: Application, img_path: Path) -> bool:
         
         # Step 5: 收尾
         main = wait_for_state(app, 'main') # 等待保存完成，焦点回到主窗口
-        send_keys("^w")  # 关闭当前标签
+        send_keys("^({F4})")  # 关闭当前标签（Ctrl+F4）
         
         total_elapsed = time.time() - file_start_time
         tprint(f"文件 {img_path.name} 处理完成！总耗时: {total_elapsed:.1f}s (打开:{open_elapsed:.1f}s, 识别:{recognition_elapsed:.1f}s, 保存:{save_elapsed:.1f}s)")
@@ -490,7 +490,7 @@ def process_single_file(app: Application, img_path: Path) -> bool:
         tprint(f"处理 {img_path.name} 失败: {e}", "ERR")
         try:
             main = wait_for_state(app, 'main', timeout=5)
-            send_keys("^w")  # 关闭标签
+            send_keys("^({F4})")  # 关闭当前标签（Ctrl+F4）
         except:
             pass
         return False
