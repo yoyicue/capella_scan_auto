@@ -1,0 +1,4 @@
+[Paths]
+input_dir = C:\path\to\your\images_folder
+output_dir = C:\path\to\your\output_folder
+capella_scan_exe = C:\Program Files (x86)\capella-software\capella-scan 9\bin\capscan.exe 

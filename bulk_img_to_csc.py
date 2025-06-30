@@ -14,6 +14,7 @@ import sys
 import subprocess
 import time
 import psutil
+import configparser
 
 # 3rd-party
 from pywinauto import Application, Desktop
@@ -43,10 +44,16 @@ except Exception:
 # -----------------------------------------------------------------------------
 # 路径 & 常量
 # -----------------------------------------------------------------------------
+config = configparser.ConfigParser()
+config_file = Path(__file__).resolve().parent / 'config.ini'
+if not config_file.exists():
+    tprint(f"配置文件 config.ini 不存在，将使用默认路径。", "WARN")
+config.read(config_file)
+
 BASE_DIR = Path(__file__).resolve().parent
-INPUT_DIR = BASE_DIR / "img_in"
-OUTPUT_DIR = BASE_DIR / "csc_out"
-CAPSCAN_EXE = r"C:\Program Files (x86)\capella-software\capella-scan 9\bin\capscan.exe"
+INPUT_DIR = Path(config.get('Paths', 'input_dir', fallback=str(BASE_DIR / "img_in")))
+OUTPUT_DIR = Path(config.get('Paths', 'output_dir', fallback=str(BASE_DIR / "csc_out")))
+CAPSCAN_EXE = config.get('Paths', 'capella_scan_exe', fallback=r"C:\Program Files (x86)\capella-software\capella-scan 9\bin\capscan.exe")
 
 # Qt QAction objectName → AutomationId（Qt 5.15.2）
 START_BTN_ID = "actionStartRecognition"
