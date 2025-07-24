@@ -47,7 +47,7 @@ except Exception:
 config = configparser.ConfigParser()
 config_file = Path(__file__).resolve().parent / 'config.ini'
 if not config_file.exists():
-    tprint(f"配置文件 config.ini 不存在，将使用默认路径。", "WARN")
+    print(f"配置文件 config.ini 不存在，将使用默认路径。")
 config.read(config_file)
 
 BASE_DIR = Path(__file__).resolve().parent
